@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+        "aws-docs": {
+            "command": "uvx",
+            "args": ["awslabs.aws-documentation-mcp-server@latest"]
+        },
+        "dynamodb": {
+            "command": "uvx",
+            "args": ["awslabs.dynamodb-mcp-server@latest"],
+            "env": { "AWS_PROFILE": "greeter-dev", "AWS_REGION": "eu-west-2"}
+        }
+    }
+}

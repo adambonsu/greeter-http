@@ -1,0 +1,53 @@
+# Bundler
+/.bundle/
+/vendor/bundle/
+/vendor/cache/
+
+# Gems built locally
+*.gem
+
+# Ruby version managers
+.ruby-version
+.ruby-gemset
+.rvmrc
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Test & coverage artifacts
+/coverage/
+/spec/examples.txt
+/.rspec_status
+rspec_examples.txt
+
+# RuboCop cache
+/.rubocop-cache/
+.rubocop-https*
+
+# Security tooling output
+/brakeman-output.*
+
+# Serverless / SAM / build artifacts
+/.serverless/
+/.aws-sam/
+/.lambda/
+/pkg/
+/tmp/
+*.zip
+
+# Logs
+*.log
+/log/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+*.iml
+.vscode/
+
+# Kiro local caches (keep steering, hooks, specs tracked)
+.kiro/**/cache/

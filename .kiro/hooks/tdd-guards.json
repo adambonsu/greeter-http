@@ -1,0 +1,38 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "run-related-spec-on-save",
+      "description": "Run the unit suite whenever lib/ changes",
+      "trigger": "FileSave",
+      "matcher": "lib/greeter_http/.*\\.rb$",
+      "action": {
+        "type": "command",
+        "command": "bundle exec rspec --fail-fast --format progress"
+      },
+      "timeout": 120
+    },
+    {
+      "name": "rubocop-on-save",
+      "trigger": "FileSave",
+      "matcher": "\\.rb$",
+      "action": { "type": "command", "command": "bundle exec rubocop -A --fail-level E" }
+    },
+    {
+      "name": "protect-tests-during-apply",
+      "description": "Block agent writes to spec/ and features/ unless I approve",
+      "trigger": "PreToolUse",
+      "matcher": "(write|edit|fs_write)",
+      "action": { "type": "command", "command": "bin/guard-test-edits" }
+    },
+    {
+      "name": "full-suite-when-agent-stops",
+      "trigger": "AgentStop",
+      "action": {
+        "type": "command",
+        "command": "bundle exec rspec && bundle exec cucumber && openspec validate --all --strict --no-interactive"
+      },
+      "timeout": 300
+    }
+  ]
+}
