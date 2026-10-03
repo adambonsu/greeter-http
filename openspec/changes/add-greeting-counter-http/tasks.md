@@ -61,7 +61,15 @@ Keep every file RuboCop-clean and `frozen_string_literal: true`. Compose
 - [ ] 9.2 Drive the features through the Rack app (via `rack-test`) with an in-memory or DynamoDB-Local backend and a fake/controllable clock and TTL; implement step definitions until all scenarios pass.
 - [ ] 9.3 Verify each OpenSpec scenario maps to exactly one `@requirement-greeting-counter` Cucumber scenario (count and names line up).
 
-## 10. Full verification gate
+## 10. Infrastructure (AWS SAM)
 
-- [ ] 10.1 Run `bundle exec rspec` and `bundle exec cucumber` — all green; remove `tmp/allow-test-edits`.
-- [ ] 10.2 Run `bundle exec rubocop` clean and `openspec validate add-greeting-counter-http --strict --no-interactive` — both pass.
+- [ ] 10.1 Author `infra/template.yaml` (AWS SAM): Ruby 3.3 Lambda pointing at `adapters/lambda_handler`, HTTP API with a single `POST /greetings` route and route-level throttling; verify `sam validate` passes.
+- [ ] 10.2 Define the DynamoDB table in the template: on-demand (pay-per-request) billing, PITR enabled, SSE enabled, and TTL on `expires_at`; pass the table name to the Lambda via environment; verify `sam validate` and that the TTL/PITR/SSE properties are present.
+- [ ] 10.3 Scope the Lambda execution role to least privilege on that one table: `dynamodb:GetItem` and `dynamodb:TransactWriteItems` (the optimistic-lock write) only, resource-limited to the table ARN; verify no wildcard table/action remains in the rendered policy.
+- [ ] 10.4 Enable X-Ray active tracing on the Lambda and set CloudWatch log retention to 14 days; verify both appear in `sam validate`/the synthesized template.
+- [ ] 10.5 Add CloudWatch alarms on the HTTP API 5xx rate and p95 latency; verify the alarms synthesize with sensible thresholds and reference the right metrics.
+
+## 11. Full verification gate
+
+- [ ] 11.1 Run `bundle exec rspec` and `bundle exec cucumber` — all green; remove `tmp/allow-test-edits`.
+- [ ] 11.2 Run `bundle exec rubocop` clean and `openspec validate add-greeting-counter-http --strict --no-interactive` — both pass.

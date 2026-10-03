@@ -22,6 +22,12 @@ delivery that Lambda/API Gateway imply (retries must not double-count).
   using per-key dedupe items with DynamoDB TTL.
 - Deliver the service as a thin AWS Lambda handler adapter over a Rack application,
   with `app.rb` as the single composition root.
+- Provision infrastructure as AWS SAM (`infra/template.yaml`): a Ruby 3.3 Lambda
+  behind an HTTP API route (`POST /greetings`) with route-level throttling; a
+  DynamoDB table in on-demand (pay-per-request) mode with point-in-time recovery
+  (PITR) and server-side encryption (SSE); a least-privilege IAM policy limited to
+  reading and conditionally writing that one table; X-Ray tracing; 14-day CloudWatch
+  log retention; and CloudWatch alarms on 5xx rate and p95 latency.
 
 ## Capabilities
 
@@ -41,8 +47,16 @@ delivery that Lambda/API Gateway imply (retries must not double-count).
   - `app.rb` — composition root wiring all collaborators.
 - **Dependencies**: `greeter-core` (compose only), `aws-sdk-dynamodb`, `rack`;
   `rack-test`, `rspec`, `cucumber` for tests. All already present in the Gemfile.
-- **AWS**: one DynamoDB table (counter items + TTL'd dedupe items), a Lambda function,
-  and an API Gateway route. Table requires TTL enabled on the `expires_at` attribute.
+- **AWS / infrastructure** (`infra/template.yaml`, AWS SAM):
+  - DynamoDB table (counter items + TTL'd dedupe items), on-demand capacity, PITR,
+    SSE, and TTL enabled on the `expires_at` attribute.
+  - Ruby 3.3 Lambda function with X-Ray active tracing and a 14-day CloudWatch log
+    retention.
+  - HTTP API with a single `POST /greetings` route and route-level throttling.
+  - IAM execution role scoped to least privilege on that one table: `GetItem` plus
+    the transactional conditional write (`TransactWriteItems`) the optimistic-lock
+    counter uses — not a blanket table policy.
+  - CloudWatch alarms on the HTTP API 5xx rate and p95 latency.
 - **Contract**: new public HTTP API (`POST /greetings`) with defined status codes
   (201/200/400/422/409/503) and JSON bodies.
 - **No change** to `greeter-core`; `vendor/greeter-core-api.md` documents the composed surface.

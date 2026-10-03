@@ -31,9 +31,12 @@ contract. Key constraints that shape this design:
 - No change to `greeter-core` (if a core change were needed, stop).
 - No multi-region, no analytics/streaming, no auth/rate-limiting beyond the
   idempotency-key contract.
-- Infrastructure provisioning (table/Lambda/API Gateway creation) is out of scope for
-  the application code; the design states the table's required shape but IaC is
-  deferred.
+- Infrastructure is provisioned via AWS SAM (`infra/template.yaml`) and is in scope:
+  the DynamoDB table (on-demand, PITR, SSE, TTL on `expires_at`), the Ruby 3.3 Lambda
+  (X-Ray tracing, 14-day log retention), the HTTP API `POST /greetings` route with
+  throttling, a least-privilege IAM role (GetItem + TransactWriteItems on that one
+  table), and CloudWatch alarms (5xx rate, p95 latency). The application code stays
+  decoupled from provisioning; the template references the handler and table name.
 
 ## Decisions
 
