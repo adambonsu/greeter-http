@@ -51,4 +51,12 @@ fileignoreconfig:
   checksum: ff4a2663ac10dedaae5d0ef76b0a543b5100b4c88796d690a6088eb2a92f5a17
 - filename: .kiro/skills/openspec-onboard/SKILL.md
   checksum: 38eeb268db4d998d69ed374a9b6c7cb0f55540210e498e3da0808d63615b4bd0
+- filename: openspec/changes/add-greeting-counter-http/specs/greeting-counter/spec.md
+  checksum: 6dbc2a4e86568869ca380f4797b8cb708d262cc0c965c31e0cf98a228e2e66ae
+- filename: openspec/changes/add-greeting-counter-http/tasks.md
+  checksum: ae4ae91ea40fc32cc156ad7936f9227e9475218b8e3e0e937bb54ae388588ecf
+- filename: openspec/changes/add-greeting-counter-http/design.md
+  checksum: e809dd27ac46c39a28e478de3418701714ed64581f901441620b69de0bbe62d2
+- filename: vendor/greeter-core-api.md
+  checksum: c79b5e64749b38dd505bf24c307c895adc384be6f00b10739f544e26aa26beb8
 version: ""
