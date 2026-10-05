@@ -1,0 +1,19 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /greetings",
+  "rawPath": "/greetings",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json",
+    "idempotency-key": "33333333-3333-3333-3333-333333333333"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/greetings",
+      "protocol": "HTTP/1.1"
+    }
+  },
+  "body": "{\"name\":\"Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+  "isBase64Encoded": false
+}

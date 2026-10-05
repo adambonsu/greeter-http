@@ -1,6 +1,4 @@
 fileignoreconfig:
-- filename: Gemfile.lock
-  checksum: cec87f7d79883fa8ec2cb3a5657b2894848589a2f4d064b03978a3efb31c5846
 - filename: .kiro/prompts/opsx-continue.prompt.md
   checksum: e85c9fb03a8d32ba394c81ad9b71d9214fbfe4965deaf15f1e896bb13714912a
 - filename: .kiro/prompts/opsx-update.prompt.md
@@ -51,12 +49,38 @@ fileignoreconfig:
   checksum: ff4a2663ac10dedaae5d0ef76b0a543b5100b4c88796d690a6088eb2a92f5a17
 - filename: .kiro/skills/openspec-onboard/SKILL.md
   checksum: 38eeb268db4d998d69ed374a9b6c7cb0f55540210e498e3da0808d63615b4bd0
+- filename: Gemfile.lock
+  checksum: cec87f7d79883fa8ec2cb3a5657b2894848589a2f4d064b03978a3efb31c5846
+- filename: features/step_definitions/smoke_steps.rb
+  checksum: cd9007cc8cf13fd8c6c2922d93ca061c6cf18287bf41f715008a50697cbf4e77
+- filename: features/support/env.rb
+  checksum: 8a53a245f11f6278c458910d947564839734d7236eb851e9e8299b76b0c92abb
 - filename: openspec/changes/add-greeting-counter-http/specs/greeting-counter/spec.md
   checksum: 6dbc2a4e86568869ca380f4797b8cb708d262cc0c965c31e0cf98a228e2e66ae
 - filename: openspec/changes/add-greeting-counter-http/tasks.md
   checksum: ae4ae91ea40fc32cc156ad7936f9227e9475218b8e3e0e937bb54ae388588ecf
 - filename: openspec/changes/add-greeting-counter-http/design.md
   checksum: e809dd27ac46c39a28e478de3418701714ed64581f901441620b69de0bbe62d2
+- filename: spec/adapters/in_memory_greeting_counter_spec.rb
+  checksum: 94a5dbccc4b4ddf52571b9fcdb5e91a6c566d0f389c44db22ebb1d28b1f56b7a
+- filename: spec/application/greet_and_count_spec.rb
+  checksum: 102b966612b5a81eab9934b57b9d939932c87e77e9170a32bc70a555a9f5422e
+- filename: spec/fixtures/events/missing_name.json
+  checksum: d4f1b9778242104214617a0f240969d7d93fee7cc71148eb16c667d9fad093f9
+- filename: spec/fixtures/events/happy_path.json
+  checksum: 03488f66bd1e67dfeaadb2f9e1911c9c53ffd226eeb9261a773b54a5d742d043
+- filename: spec/contracts/core_ports_spec.rb
+  checksum: df8f3b2815e00c628efccec32931e71212f20ba104a775883147336193cdab75
+- filename: spec/fixtures/events/oversized_name.json
+  checksum: cf2845372cbec04ffd159caaabaa8ce3ac38543b33eab748fb44d96c5fa18c4d
+- filename: spec/fixtures/events/malformed_json.json
+  checksum: e8eb91947ab5ca37fc440dd99b38547f711bd1ba76430f1c46524052de4ecd58
+- filename: spec/architecture_spec.rb
+  checksum: 48c61033205fb46d14637008c94ad89edbea65fb3e9cb95bd1bf35b2706b9b3d
+- filename: spec/contracts/greeting_counter_contract.rb
+  checksum: f4374f1d40684d1a37ba3b8e4e67ca77ba705eba3b247c950232ef2b533fdfc4
+- filename: spec/integration/dynamo_greeting_counter_spec.rb
+  checksum: c0f254d295ad8200a06afd6b1502c210fb4e3270e8a06ae7f22c30b5f98fe943
 - filename: vendor/greeter-core-api.md
   checksum: c79b5e64749b38dd505bf24c307c895adc384be6f00b10739f544e26aa26beb8
 version: ""
