@@ -49,16 +49,36 @@ fileignoreconfig:
   checksum: ff4a2663ac10dedaae5d0ef76b0a543b5100b4c88796d690a6088eb2a92f5a17
 - filename: .kiro/skills/openspec-onboard/SKILL.md
   checksum: 38eeb268db4d998d69ed374a9b6c7cb0f55540210e498e3da0808d63615b4bd0
+- filename: .rubocop.yml
+  checksum: 4764800bff9ce74eb2edbf568b00d5f840f2a33fe266ecb1b3da6d3b9c573290
 - filename: Gemfile.lock
   checksum: cec87f7d79883fa8ec2cb3a5657b2894848589a2f4d064b03978a3efb31c5846
+- filename: README.md
+  checksum: c58829e9e457856a47bfb13004bf086560897aaea06651a4f70f255ac732af41
 - filename: features/step_definitions/smoke_steps.rb
   checksum: cd9007cc8cf13fd8c6c2922d93ca061c6cf18287bf41f715008a50697cbf4e77
 - filename: features/support/env.rb
   checksum: 8a53a245f11f6278c458910d947564839734d7236eb851e9e8299b76b0c92abb
+- filename: lib/greeter_http/adapters/in_memory_greeting_counter.rb
+  checksum: 48eb0f0d3726929bfd85ec731dc5f28650387072436d656bb5e31a78984f8795
+- filename: lib/greeter_http/adapters/rack_app.rb
+  checksum: ff3c68862c26a8d3c3c8cbaed4e413a364faa9bbe976fc25ae7d59f184ddf6f6  
+- filename: lib/greeter_http/adapters/lambda_handler.rb
+  checksum: efa78eca5bbac2f24c4f0741105015e71f1c1f2a00349b6566a400161c880059
+- filename: lib/greeter_http/application/greet_and_count.rb
+  checksum: 5c418009488d371394deb131951a6a197bdf389c394ff8f14e7f9727744267cf
+- filename: lib/greeter_http/application/greeted_guest.rb
+  checksum: 8fa79ba6e6980fa4b4c54c9f1610b1b21bbadfafc99a6ea3e5ea55f4b5629011
+- filename: lib/greeter_http/ports/greeting_counter.rb
+  checksum: 77958527c53a3d17d730ab6c13d341cfb58c22504859ad2df24c48498cb5e345
+- filename: features/step_definitions/greeting_counter_steps.rb
+  checksum: b9119581f91b32b76e2e77b89f82c747baf828acc785ba61e6cdd98982dc9717
+- filename: lib/greeter_http/adapters/dynamodb_greeting_counter.rb
+  checksum: 5429a0baeddf6ea3a6fccdf36f719235eea59babf3f3fcada0ef73f8c128cf65  
 - filename: openspec/changes/add-greeting-counter-http/specs/greeting-counter/spec.md
   checksum: 6dbc2a4e86568869ca380f4797b8cb708d262cc0c965c31e0cf98a228e2e66ae
 - filename: openspec/changes/add-greeting-counter-http/tasks.md
-  checksum: ae4ae91ea40fc32cc156ad7936f9227e9475218b8e3e0e937bb54ae388588ecf
+  checksum: 1e4d0f6ee3f89457c55b3d818568bccd4bcf264943ab7a394b1bcb88c6551633
 - filename: openspec/changes/add-greeting-counter-http/design.md
   checksum: e809dd27ac46c39a28e478de3418701714ed64581f901441620b69de0bbe62d2
 - filename: spec/adapters/in_memory_greeting_counter_spec.rb

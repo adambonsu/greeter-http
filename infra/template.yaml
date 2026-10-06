@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  greeter-http - greets a guest over HTTP (Lambda + API Gateway HTTP API) and
+  keeps a per-guest greeting count in DynamoDB, idempotent under client retries.
+
+Parameters:
+  IdempotencyTtlSeconds:
+    Type: Number
+    Default: 86400
+    Description: Retention window (seconds) for idempotency-key dedupe records.
+  RouteThrottleBurst:
+    Type: Number
+    Default: 50
+  RouteThrottleRate:
+    Type: Number
+    Default: 25
+  Latencyp95ThresholdMs:
+    Type: Number
+    Default: 1000
+
+Globals:
+  Function:
+    Runtime: ruby3.3
+    Timeout: 10
+    MemorySize: 256
+    Tracing: Active          # X-Ray active tracing
+
+Resources:
+
+  # --- DynamoDB table: counter items + TTL'd dedupe items -------------------
+  GreetingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST          # on-demand
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:               # TTL on dedupe items
+        AttributeName: expires_at
+        Enabled: true
+      PointInTimeRecoverySpecification:      # PITR
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:                      # server-side encryption
+        SSEEnabled: true
+
+  # --- Lambda function ------------------------------------------------------
+  GreeterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.handler
+      CodeUri: ../
+      Environment:
+        Variables:
+          GREETER_TABLE_NAME: !Ref GreetingsTable
+          GREETER_IDEMPOTENCY_TTL_SECONDS: !Ref IdempotencyTtlSeconds
+      # Least-privilege: read + the transactional conditional write only, scoped
+      # to this one table's ARN. No wildcard table or action.
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:TransactWriteItems
+              Resource: !GetAtt GreetingsTable.Arn
+      Events:
+        PostGreeting:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /greetings
+            Method: POST
+
+  # Lambda log group with 14-day retention.
+  GreeterFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GreeterFunction}
+      RetentionInDays: 14
+
+  # --- HTTP API with route-level throttling ---------------------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: !Ref RouteThrottleBurst
+        ThrottlingRateLimit: !Ref RouteThrottleRate
+
+  # --- CloudWatch alarms ----------------------------------------------------
+  Http5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: HTTP API 5xx error rate is elevated.
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref HttpApi
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 0.05                 # 5% of requests
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  HttpLatencyP95Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: HTTP API p95 latency is elevated.
+      Namespace: AWS/ApiGateway
+      MetricName: Latency
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref HttpApi
+      ExtendedStatistic: p95
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref Latencyp95ThresholdMs
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL of the greeter HTTP API.
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  TableName:
+    Description: DynamoDB table name.
+    Value: !Ref GreetingsTable

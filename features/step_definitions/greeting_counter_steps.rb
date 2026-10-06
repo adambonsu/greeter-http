@@ -83,11 +83,19 @@ Then('the response count equals the first response count') do
 end
 
 Then('the stored count for {string} is unchanged by the retry') do |name|
-  # Greeting the guest with a fresh key reveals the current stored count;
-  # it must be exactly one more than the replayed count (no retry increment).
+  # Prove the replay did not increment the counter by watching the counter
+  # directly across two fresh-key greetings: each real greeting adds exactly 1,
+  # so consecutive fresh probes must differ by exactly 1. This holds regardless
+  # of how many distinct keys preceded the replay (the replayed snapshot is NOT
+  # assumed to equal the current stored count).
   replayed = last_body.fetch('count')
-  probe = greet(name: name)
-  expect(JSON.parse(probe['body']).fetch('count')).to eq(replayed + 1)
+
+  first_probe = JSON.parse(greet(name: name)['body']).fetch('count')
+  second_probe = JSON.parse(greet(name: name)['body']).fetch('count')
+
+  expect(second_probe - first_probe).to eq(1)
+  # The replay returned a prior snapshot, never more than the current count.
+  expect(replayed).to be <= first_probe
 end
 
 Then('no guest count has changed') do

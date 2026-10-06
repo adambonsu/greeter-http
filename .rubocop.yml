@@ -1,0 +1,107 @@
+plugins:
+  - rubocop-rspec
+
+# Merge our Exclude list with RuboCop's defaults instead of replacing them.
+inherit_mode:
+  merge:
+    - Exclude
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.3
+  SuggestExtensions: false
+  Exclude:
+    - 'vendor/**/*'
+    - 'tmp/**/*'
+
+# Namespace modules and small value/adapter classes are self-documenting here;
+# matches the convention used by the sibling greeter-cli project.
+Style/Documentation:
+  Enabled: false
+
+# Specs and features are inherently long / multi-step.
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+    - 'features/**/*'
+
+Metrics/ExampleLength:
+  Enabled: false
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+RSpec/ExampleLength:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/MultipleMemoizedHelpers:
+  Enabled: false
+
+# `Result`/`GreetedGuest` deliberately expose a `count` member; the override of
+# Struct#count is intended and relied upon by callers.
+Lint/StructNewOverride:
+  Enabled: false
+
+# The Lambda handler signature must accept `context:` even when unused.
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true
+
+# AWS SDK request/response shapes and event<->Rack translation are inherently
+# verbose (large literal hashes, many conditionals). Raise the metric ceilings
+# to pragmatic values that still catch genuine bloat.
+Metrics/MethodLength:
+  Max: 25
+Metrics/AbcSize:
+  Max: 25
+Metrics/ClassLength:
+  Max: 150
+Metrics/CyclomaticComplexity:
+  Max: 10
+Metrics/PerceivedComplexity:
+  Max: 10
+
+# `pk`, `now` and similar short names are idiomatic here (DynamoDB partition
+# key, current time).
+Naming/MethodParameterName:
+  AllowedNames:
+    - pk
+    - sk
+    - now
+    - to
+
+# ---------------------------------------------------------------------------
+# Specs and features
+#
+# These suites use an intentional layout: contract/architecture specs describe
+# behaviours rather than a single class, and deliberately declare helper
+# constants (event fixtures dir, concrete-adapter lists) and lightweight step
+# World helpers. Keep ordinary cops meaningful without fighting that structure.
+# ---------------------------------------------------------------------------
+RSpec/DescribeClass:
+  Enabled: false
+
+RSpec/LeadingSubject:
+  Enabled: false
+
+RSpec/LeakyConstantDeclaration:
+  Exclude:
+    - 'spec/**/*'
+
+Lint/ConstantDefinitionInBlock:
+  Exclude:
+    - 'spec/**/*'
+
+Layout/ArgumentAlignment:
+  Exclude:
+    - 'spec/**/*'
+
+Lint/UselessTimes:
+  Exclude:
+    - 'spec/**/*'
+
+Style/StringConcatenation:
+  Exclude:
+    - 'features/**/*'

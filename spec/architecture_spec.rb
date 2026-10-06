@@ -56,11 +56,17 @@ RSpec.describe 'architecture boundaries' do
   describe 'no file reopens a Greeter::Core class' do
     # Matches `module Greeter` / `class Greeter::...` reopenings, and
     # `class X < Greeter::Core::...` subclassing.
+    #
+    # EXCEPTION: subclassing an abstract port under `Greeter::Core::Ports::` is
+    # the gem's sanctioned extension point (those classes ship with methods that
+    # raise NotImplementedError specifically to be implemented by adapters), so
+    # the subclass pattern excludes `Greeter::Core::Ports::`. Reopening or
+    # subclassing any core *domain* class remains forbidden.
     REOPEN_PATTERNS = [
       /^\s*module\s+Greeter\b/,
       /^\s*class\s+Greeter\b/,
       /^\s*(module|class)\s+Greeter::Core\b/,
-      /^\s*class\s+\w+\s*<\s*Greeter::Core::/
+      /^\s*class\s+\w+\s*<\s*Greeter::Core::(?!Ports::)/
     ].freeze
 
     it 'finds no reopening or subclassing of Greeter::Core' do

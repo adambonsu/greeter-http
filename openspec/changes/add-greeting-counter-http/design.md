@@ -181,8 +181,15 @@ keyword-argument seams.
 
 ## Risks / Trade-offs
 
-- **Optimistic-lock retries under contention** → bounded retry with a small cap;
-  concurrency per guest is low for a greeting service, so contention is rare.
+- **Optimistic-lock retries under contention** → bounded retry with exponential
+  backoff and full jitter so concurrent writers de-synchronize; concurrency per guest
+  is low for a greeting service, so contention is rare. A single hot counter item is
+  still a per-partition write bottleneck, so under genuinely heavy concurrent writes
+  to one guest the retries will eventually exhaust. **Next step if that becomes real:
+  write-sharding** — split a guest's counter across N shard items
+  (`SK = "COUNTER#<shard>"`), increment a random shard per write, and sum the shards
+  on read — trading a hot single item for a scatter-read. Deferred until the write
+  rate justifies it; the `GreetingCounter` port means it is an adapter-only change.
 - **Extra `GetItem` before the transaction** (to compute the exact snapshot) → one
   cheap read per write; acceptable at this scale and the price of an always-correct
   counter.
