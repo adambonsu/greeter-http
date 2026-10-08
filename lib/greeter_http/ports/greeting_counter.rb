@@ -29,6 +29,19 @@ module GreeterHttp
       def increment(guest:, idempotency_key:, fingerprint:)
         raise NotImplementedError, "#{self.class}#increment is not implemented"
       end
+
+      private
+
+      # Guards the required string arguments. A nil/empty fingerprint (or key)
+      # is a programming error — the application layer always supplies a real
+      # value — so fail fast rather than storing or comparing a null.
+      # Implementations call this at the top of #increment.
+      def validate_arguments!(idempotency_key:, fingerprint:)
+        raise ArgumentError, 'idempotency_key must be a non-empty string' \
+          unless idempotency_key.is_a?(String) && !idempotency_key.empty?
+        raise ArgumentError, 'fingerprint must be a non-empty string' \
+          unless fingerprint.is_a?(String) && !fingerprint.empty?
+      end
     end
   end
 end

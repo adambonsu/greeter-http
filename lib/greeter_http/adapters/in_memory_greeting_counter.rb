@@ -24,6 +24,7 @@ module GreeterHttp
       end
 
       def increment(guest:, idempotency_key:, fingerprint:)
+        validate_arguments!(idempotency_key: idempotency_key, fingerprint: fingerprint)
         guest_key = guest.to_s
 
         @mutex.synchronize do

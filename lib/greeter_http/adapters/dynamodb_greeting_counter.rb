@@ -34,6 +34,7 @@ module GreeterHttp
       end
 
       def increment(guest:, idempotency_key:, fingerprint:)
+        validate_arguments!(idempotency_key: idempotency_key, fingerprint: fingerprint)
         pk = "GUEST##{guest}"
         attempt = 0
 

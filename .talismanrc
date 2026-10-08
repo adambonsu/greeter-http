@@ -60,7 +60,7 @@ fileignoreconfig:
 - filename: features/support/env.rb
   checksum: 8a53a245f11f6278c458910d947564839734d7236eb851e9e8299b76b0c92abb
 - filename: lib/greeter_http/adapters/in_memory_greeting_counter.rb
-  checksum: 48eb0f0d3726929bfd85ec731dc5f28650387072436d656bb5e31a78984f8795
+  checksum: 42805d5b81672d04692c2d8b31b93ae0eb4f8fe77d666095d826f2b5083a4290
 - filename: lib/greeter_http/adapters/rack_app.rb
   checksum: ff3c68862c26a8d3c3c8cbaed4e413a364faa9bbe976fc25ae7d59f184ddf6f6  
 - filename: lib/greeter_http/adapters/lambda_handler.rb
@@ -70,11 +70,11 @@ fileignoreconfig:
 - filename: lib/greeter_http/application/greeted_guest.rb
   checksum: 8fa79ba6e6980fa4b4c54c9f1610b1b21bbadfafc99a6ea3e5ea55f4b5629011
 - filename: lib/greeter_http/ports/greeting_counter.rb
-  checksum: 77958527c53a3d17d730ab6c13d341cfb58c22504859ad2df24c48498cb5e345
+  checksum: f797da2da5127c2bae87f1ac31133eea32b99c9b8c46ade19ed2a3db5746c052
 - filename: features/step_definitions/greeting_counter_steps.rb
   checksum: b9119581f91b32b76e2e77b89f82c747baf828acc785ba61e6cdd98982dc9717
 - filename: lib/greeter_http/adapters/dynamodb_greeting_counter.rb
-  checksum: 5429a0baeddf6ea3a6fccdf36f719235eea59babf3f3fcada0ef73f8c128cf65  
+  checksum: 0e31cbc11deef0ec9ec20af336ee0fed0869a8478349a16ca2bf976111ec817b  
 - filename: openspec/changes/add-greeting-counter-http/specs/greeting-counter/spec.md
   checksum: 6dbc2a4e86568869ca380f4797b8cb708d262cc0c965c31e0cf98a228e2e66ae
 - filename: openspec/changes/add-greeting-counter-http/tasks.md
@@ -98,7 +98,7 @@ fileignoreconfig:
 - filename: spec/architecture_spec.rb
   checksum: 48c61033205fb46d14637008c94ad89edbea65fb3e9cb95bd1bf35b2706b9b3d
 - filename: spec/contracts/greeting_counter_contract.rb
-  checksum: f4374f1d40684d1a37ba3b8e4e67ca77ba705eba3b247c950232ef2b533fdfc4
+  checksum: 5c1620ec9f38de3fb46fccfa89ba04eb7b21f77a496572b52bf7d686440fd684
 - filename: spec/integration/dynamo_greeting_counter_spec.rb
   checksum: c0f254d295ad8200a06afd6b1502c210fb4e3270e8a06ae7f22c30b5f98fe943
 - filename: vendor/greeter-core-api.md
