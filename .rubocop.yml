@@ -25,9 +25,6 @@ Metrics/BlockLength:
     - 'spec/**/*'
     - 'features/**/*'
 
-Metrics/ExampleLength:
-  Enabled: false
-
 RSpec/SpecFilePathFormat:
   Enabled: false
 

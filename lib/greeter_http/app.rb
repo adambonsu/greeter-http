@@ -41,10 +41,26 @@ module GreeterHttp
 
     def default_counter(clock)
       Adapters::DynamoDbGreetingCounter.new(
-        client: Aws::DynamoDB::Client.new,
+        client: dynamodb_client,
         table_name: ENV.fetch('GREETER_TABLE_NAME'),
         ttl_seconds: Integer(ENV.fetch('GREETER_IDEMPOTENCY_TTL_SECONDS', DEFAULT_TTL_SECONDS)),
         clock: clock
+      )
+    end
+
+    # Honor an optional endpoint override so the function can run against a
+    # local DynamoDB (e.g. DynamoDB Local via `sam local`). In AWS the variable
+    # is unset and the SDK resolves the real regional endpoint and the task's
+    # IAM credentials. For a local endpoint we also pass static dummy
+    # credentials so DynamoDB Local accepts the request regardless of any
+    # placeholder credentials the local runtime injected.
+    def dynamodb_client
+      endpoint = ENV.fetch('GREETER_DYNAMODB_ENDPOINT', nil)
+      return Aws::DynamoDB::Client.new if endpoint.nil? || endpoint.empty?
+
+      Aws::DynamoDB::Client.new(
+        endpoint: endpoint,
+        credentials: Aws::Credentials.new('local', 'local')
       )
     end
   end

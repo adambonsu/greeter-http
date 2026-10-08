@@ -84,10 +84,12 @@ exact, even under concurrent requests and retries.
 
 ## Requirements
 
-- Ruby 3.3.5 (see `.ruby-version` / `Gemfile`)
+- Ruby 3.3.x (pinned to 3.3.5 locally via `.ruby-version`). The `Gemfile`
+  deliberately carries no `ruby` directive so the Lambda `ruby3.3` managed
+  runtime (currently a 3.3.x patch) is accepted at deploy time.
 - Bundler
-- For deploy / local invoke: the [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-  and AWS credentials
+- For deploy / local build + invoke: the [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
+  (a recent version — `ruby3.3` support requires newer than 1.1xx) and Docker
 - For the integration suite: Docker + DynamoDB Local (optional)
 
 ## Setup
@@ -117,24 +119,41 @@ bundle exec rubocop      # lint
 ### Optional: integration specs against DynamoDB Local
 
 These are tagged `:integration` and skipped unless `DYNAMODB_ENDPOINT` is set.
+This is the most reliable way to exercise the full DynamoDB happy path locally:
+it drives the real `DynamoDbGreetingCounter` against DynamoDB Local, with no
+Lambda-container credential plumbing in the way.
 
 ```bash
-# start DynamoDB Local (example)
+# start DynamoDB Local
 docker run -p 8000:8000 amazon/dynamodb-local
 
 DYNAMODB_ENDPOINT=http://localhost:8000 bundle exec rspec spec/integration
 ```
 
+## Building
+
+> **Always build with `--use-container`.** The Ruby bundle (including
+> `greeter-core` and native extensions) must be compiled for the Lambda
+> `ruby3.3` runtime. `--use-container` runs `bundle install` inside the AWS
+> `build-ruby3.3` image so gems land under `vendor/bundle/ruby/3.3.0`. A plain
+> `sam build` uses the host Ruby instead; if the host is on a different Ruby
+> (this machine's default is a newer line), gems get vendored under the wrong
+> ABI directory and the function fails at init with `cannot load such file`.
+
+```bash
+sam build --use-container -t infra/template.yaml
+```
+
+The build writes `.aws-sam/build/` (artifact + `template.yaml`). Run `sam local`
+and `sam deploy` against that **built** template.
+
 ## Interacting with the service
 
 ### Locally with the SAM CLI
 
-Build and start the API on your machine (requires Docker + a local DynamoDB
-table the function can reach):
-
 ```bash
-sam build -t infra/template.yaml
-sam local start-api -t infra/template.yaml
+sam build --use-container -t infra/template.yaml
+sam local start-api -t .aws-sam/build/template.yaml   # note: the BUILT template
 ```
 
 Then call it:
@@ -150,10 +169,23 @@ Repeat the same command (same `Idempotency-Key`) and you'll get `200` with the
 same `count`. Change the key and the count increments. Change the body under an
 existing key and you'll get `409`.
 
+To let the local function reach a DynamoDB, the composition root honors an
+optional `GREETER_DYNAMODB_ENDPOINT` override (unset in real AWS). Point it at a
+DynamoDB Local reachable from the Lambda container and pass the matching table
+name, e.g. via `--env-vars env.json` and `--docker-network`.
+
+> **Note:** wiring `sam local` to DynamoDB Local can trip on credential/region
+> signing against DynamoDB Local (`UnrecognizedClientException`), which is a
+> local-tooling quirk, not an application issue. For a dependable local run of
+> the full DynamoDB path, prefer the `:integration` suite above. Without a
+> reachable DynamoDB the endpoint correctly returns `503` (the datastore is
+> unavailable) — the rest of the pipeline still runs.
+
 ### Invoking the handler directly
 
 ```bash
-sam local invoke -t infra/template.yaml -e spec/fixtures/events/happy_path.json
+sam local invoke GreeterFunction -t .aws-sam/build/template.yaml \
+  -e spec/fixtures/events/happy_path.json
 ```
 
 (Event fixtures used by the tests live in `spec/fixtures/events/`.)
@@ -161,8 +193,8 @@ sam local invoke -t infra/template.yaml -e spec/fixtures/events/happy_path.json
 ## Deploying
 
 ```bash
-sam build -t infra/template.yaml
-sam deploy --guided -t infra/template.yaml
+sam build --use-container -t infra/template.yaml
+sam deploy --guided
 ```
 
 The template provisions a Ruby 3.3 Lambda, an HTTP API (`POST /greetings` with
