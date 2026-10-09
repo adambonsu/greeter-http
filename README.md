@@ -423,18 +423,33 @@ What the release job does on a `v*` tag:
 - Runs `sam build` on the GitHub Ubuntu runner (its host Ruby is 3.3.5 via
   `setup-ruby`, matching the Lambda `ruby3.3` ABI, so a plain `sam build`
   vendors gems correctly — no `--use-container` needed in CI).
-- Packages a tarball `greeter-http-v0.1.0.tar.gz` containing the SAM build output
-  (`build/` — function code plus vendored gems) and `infra/template.yaml`, with a
-  `.sha256` checksum alongside.
+- Packages a tarball `greeter-http-v0.1.0.tar.gz` laid out as a ready-to-deploy
+  SAM working directory: the build output sits at its conventional
+  `.aws-sam/build/` location (function code, vendored gems, and the built
+  template), with a `.sha256` checksum alongside.
 - Resolves the bundled `greeter-core` version from the lock and records it in the
   release notes, so the `greeter-http`↔`greeter-core` pairing is discoverable
   from the Release without decoding the tag.
 - Creates the GitHub Release and attaches both assets.
 
-The release ships a deployable artifact, not a running service. To deploy a
-release, download and unpack the tarball and run `sam deploy` against the
-included `template.yaml` (see [Deploying](#deploying)); the pinned dependency
-set is in the bundled `Gemfile.lock`.
+The release is a pre-built, ready-to-deploy artifact, not a running service — so
+you deploy it **without** re-running `sam build`. The tarball unpacks into a
+normal SAM working directory (the build output is at `.aws-sam/build/`), so a
+bare `sam deploy` finds it:
+
+```bash
+tar -xzf greeter-http-v0.1.0.tar.gz
+cd greeter-http-v0.1.0
+sam deploy --guided
+```
+
+`--guided` prompts for stack name, region, and parameters, then saves them to
+`samconfig.toml` for subsequent `sam deploy` runs. Leave `DynamoDbEndpoint`
+empty (it is a local-only override; see
+[Locally with the SAM CLI](#locally-with-the-sam-cli)). You need AWS credentials
+and a region configured, and permission to create the Lambda, HTTP API, DynamoDB
+table, IAM role, and alarms. The pinned dependency set is in the bundled
+`Gemfile.lock`.
 
 > **Note:** the `release` job needs `contents: write` (declared in the workflow)
 > to create the Release. Confirm the repository's Settings → Actions → Workflow

@@ -271,13 +271,18 @@ jobs:
           version="${GITHUB_REF_NAME}"
           pkg="greeter-http-${version}"
           mkdir -p "dist/${pkg}"
-          # Ship the built function (code + vendored gems) and the SAM template.
-          cp -r .aws-sam/build "dist/${pkg}/build"
-          cp infra/template.yaml "dist/${pkg}/template.yaml"
+          # Lay the build output out at its conventional .aws-sam/build/ location
+          # so the extracted directory is a normal SAM working dir: `cd` in and
+          # `sam deploy --guided` just works, no --template flag needed. The
+          # built template's CodeUri points at the packaged code (vendored gems
+          # included). We deliberately do NOT ship the source template.yaml —
+          # it would be the wrong one to deploy and only invites mistakes.
+          mkdir -p "dist/${pkg}/.aws-sam"
+          cp -r .aws-sam/build "dist/${pkg}/.aws-sam/build"
           cp README.md "dist/${pkg}/" 2>/dev/null || true
           tar -czf "dist/${pkg}.tar.gz" -C dist "${pkg}"
           ( cd dist && sha256sum "${pkg}.tar.gz" > "${pkg}.tar.gz.sha256" )
-          ls -l dist
+          ls -lR "dist/${pkg}"
 
       - name: Create GitHub Release and upload the artifact
         uses: softprops/action-gh-release@v2
@@ -288,8 +293,8 @@ jobs:
           body: |
             **greeter-http ${{ github.ref_name }}** — built against **greeter-core ${{ steps.core.outputs.version }}**.
 
-            The tarball contains the SAM build output (`build/`) and `template.yaml`.
-            Deploy with `sam deploy` against the included template. The exact pinned
+            The tarball is a ready-to-deploy SAM build. Unpack it, `cd` in, and run
+            `sam deploy --guided` (needs AWS credentials). The exact pinned
             dependency set is in the bundled `Gemfile.lock`.
           generate_release_notes: true
           fail_on_unmatched_files: true
