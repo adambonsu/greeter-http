@@ -387,3 +387,57 @@ openspec validate --all --strict --no-interactive
 
 Keep the local upgrade and the `OPENSPEC_VERSION` bump in the **same commit** so
 CI and developer machines never drift apart.
+
+## Cutting a release (maintainers)
+
+Releases are produced by the `release` job in `.github/workflows/ci.yml`. It runs
+**only** on version tags and **only** if every other CI job passes (`spec`,
+`bdd`, `lint`, `security`, `integration`, `spec-gate`), then builds the Lambda
+artifact and creates the GitHub Release.
+
+The service version lives in `lib/greeter_http/version.rb` as
+`GreeterHttp::VERSION` (surfaced in the startup banner) and **must match the
+release tag** — the release job fails fast if they disagree.
+
+1. Bump `GreeterHttp::VERSION` in `lib/greeter_http/version.rb` to the version
+   you intend to tag; commit it.
+2. Make sure `main` is green: push and confirm the CI run passes end to end
+   (the release job is skipped on non-tag builds — that's expected).
+3. Tag with a **`v` prefix** matching the constant, and push the tag:
+
+   ```bash
+   git tag v0.1.0        # must equal GreeterHttp::VERSION (0.1.0)
+   git push origin v0.1.0
+   ```
+
+The tag must start with `v` (e.g. `v0.1.0`). The workflow triggers on
+`tags: ["v*"]` and the release job guards on `refs/tags/v`, so a bare `0.1.0`
+tag is ignored and produces no release. If the tag and `GreeterHttp::VERSION`
+disagree, the release job's "Check VERSION matches the tag" step fails before
+building — bump the constant to match and re-tag.
+
+What the release job does on a `v*` tag:
+
+- Asserts `GreeterHttp::VERSION` equals the tag (minus the `v`), failing the
+  release before any build if they drift.
+- Runs `sam build` on the GitHub Ubuntu runner (its host Ruby is 3.3.5 via
+  `setup-ruby`, matching the Lambda `ruby3.3` ABI, so a plain `sam build`
+  vendors gems correctly — no `--use-container` needed in CI).
+- Packages a tarball `greeter-http-v0.1.0.tar.gz` containing the SAM build output
+  (`build/` — function code plus vendored gems) and `infra/template.yaml`, with a
+  `.sha256` checksum alongside.
+- Resolves the bundled `greeter-core` version from the lock and records it in the
+  release notes, so the `greeter-http`↔`greeter-core` pairing is discoverable
+  from the Release without decoding the tag.
+- Creates the GitHub Release and attaches both assets.
+
+The release ships a deployable artifact, not a running service. To deploy a
+release, download and unpack the tarball and run `sam deploy` against the
+included `template.yaml` (see [Deploying](#deploying)); the pinned dependency
+set is in the bundled `Gemfile.lock`.
+
+> **Note:** the `release` job needs `contents: write` (declared in the workflow)
+> to create the Release. Confirm the repository's Settings → Actions → Workflow
+> permissions allow it, otherwise the final step fails when the tag is pushed.
+
+See `openspec/` for the specification of externally observable behaviour.

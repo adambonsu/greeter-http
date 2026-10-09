@@ -239,6 +239,18 @@ jobs:
           bundler: ${{ env.BUNDLER_VERSION }}
           bundler-cache: true
 
+      # Fail the release early if GreeterHttp::VERSION and the pushed tag
+      # disagree, so a deployed artifact can never misreport its own version.
+      - name: Check VERSION matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"               # v0.1.0 -> 0.1.0
+          const="$(bundle exec ruby -Ilib -e 'require "greeter_http/version"; print GreeterHttp::VERSION')"
+          echo "tag=${tag} GreeterHttp::VERSION=${const}"
+          if [ "${tag}" != "${const}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match GreeterHttp::VERSION ${const}. Bump lib/greeter_http/version.rb to ${tag} and re-tag."
+            exit 1
+          fi
+
       - uses: aws-actions/setup-sam@v2
         with:
           use-installer: true

@@ -16,8 +16,11 @@ $LOAD_PATH.unshift(File.expand_path('lib', __dir__))
 
 require 'greeter_http'
 
-# Log which counter backend is wired at startup, so it's obvious whether the
+# Startup banner: the service version (for deployment observability) and which
+# counter backend is wired, so it's obvious what's running and whether the
 # server is talking to DynamoDB or the in-memory store.
+warn "[greeter-http] version=#{GreeterHttp::VERSION}"
+
 backend = ENV.fetch('GREETER_BACKEND', 'memory')
 if backend == 'dynamodb'
   table = ENV.fetch('GREETER_TABLE_NAME', '(unset — GREETER_TABLE_NAME required)')

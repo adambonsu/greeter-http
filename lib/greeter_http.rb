@@ -16,6 +16,9 @@ module GreeterHttp
   module Adapters; end
 end
 
+# Version constant.
+require 'greeter_http/version'
+
 # Ports (abstract interfaces).
 require 'greeter_http/ports/greeting_counter'
 
