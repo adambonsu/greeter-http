@@ -71,13 +71,20 @@ Resources:
           GREETER_DYNAMODB_ENDPOINT: !Ref DynamoDbEndpoint
       # Least-privilege: read + the transactional conditional write only, scoped
       # to this one table's ARN. No wildcard table or action.
+      #
+      # The counter write is a TransactWriteItems containing a Put (dedupe item)
+      # and an Update (counter). DynamoDB authorizes a transaction by the
+      # UNDERLYING item actions, not by `TransactWriteItems`, so the role needs
+      # PutItem + UpdateItem (not TransactWriteItems). GetItem covers the
+      # pre-read and the replay read.
       Policies:
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
-                - dynamodb:TransactWriteItems
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt GreetingsTable.Arn
       Events:
         PostGreeting:

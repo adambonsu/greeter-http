@@ -34,8 +34,9 @@ contract. Key constraints that shape this design:
 - Infrastructure is provisioned via AWS SAM (`infra/template.yaml`) and is in scope:
   the DynamoDB table (on-demand, PITR, SSE, TTL on `expires_at`), the Ruby 3.3 Lambda
   (X-Ray tracing, 14-day log retention), the HTTP API `POST /greetings` route with
-  throttling, a least-privilege IAM role (GetItem + TransactWriteItems on that one
-  table), and CloudWatch alarms (5xx rate, p95 latency). The application code stays
+  throttling, a least-privilege IAM role (GetItem + PutItem + UpdateItem on that one
+  table — a TransactWriteItems is authorized by its underlying Put/Update actions,
+  not by TransactWriteItems), and CloudWatch alarms (5xx rate, p95 latency). The application code stays
   decoupled from provisioning; the template references the handler and table name.
 
 ## Decisions

@@ -318,16 +318,70 @@ sam deploy --guided
 The template provisions a Ruby 3.3 Lambda, an HTTP API (`POST /greetings` with
 route throttling), the DynamoDB table (on-demand, PITR, SSE, TTL on
 `expires_at`), a least-privilege execution role (`dynamodb:GetItem` +
-`dynamodb:TransactWriteItems` on that one table), X-Ray tracing, 14-day log
+`dynamodb:PutItem` + `dynamodb:UpdateItem` on that one table — the counter write
+is a `TransactWriteItems`, which DynamoDB authorizes by its underlying Put/Update
+actions, not by `TransactWriteItems` itself), X-Ray tracing, 14-day log
 retention, and CloudWatch alarms on 5xx rate and p95 latency.
 
-`sam deploy` prints the API base URL as the `ApiBaseUrl` output. Then:
+`sam deploy` prints the API base URL as the `ApiBaseUrl` output.
+
+### Testing a deployment
+
+The function is wired to `POST /greetings` on the HTTP API's `$default` stage,
+so the endpoint is `<ApiBaseUrl>/greetings` (no stage segment in the path). Set a
+shell variable to the `ApiBaseUrl` output and exercise the contract:
 
 ```bash
-curl -i "$API_BASE_URL/greetings" \
+BASE="https://xxxxxxxxxx.execute-api.<region>.amazonaws.com"   # the ApiBaseUrl output
+
+# 1. First greeting -> 201, count 1
+curl -i "$BASE/greetings" \
   -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{"name":"alice bonsu"}'
+
+# 2. Idempotent replay: same key + same body -> 200, SAME count (no double-count)
+KEY="fixed-key-123"
+curl -i "$BASE/greetings" -H 'Content-Type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"carol kay"}'
+curl -i "$BASE/greetings" -H 'Content-Type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"carol kay"}'
+
+# 3. New key, same guest -> 201, count incremented
+curl -i "$BASE/greetings" -H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen)" -d '{"name":"carol kay"}'
+
+# 4. Key reused with a DIFFERENT body -> 409
+curl -i "$BASE/greetings" -H 'Content-Type: application/json' -H "Idempotency-Key: $KEY" -d '{"name":"different person"}'
+
+# 5. Missing Idempotency-Key -> 400
+curl -i "$BASE/greetings" -H 'Content-Type: application/json' -d '{"name":"alice"}'
+
+# 6. Invalid (empty) name -> 422
+curl -i "$BASE/greetings" -H 'Content-Type: application/json' -H "Idempotency-Key: $(uuidgen)" -d '{"name":""}'
+```
+
+Or run the `@smoke` Cucumber feature against the deployed endpoint (see
+[Smoke test against a deployed endpoint](#smoke-test-against-a-deployed-endpoint)).
+
+To confirm it is really persisting to DynamoDB, scan the table (its name is the
+`TableName` stack output), where you should see `GUEST#…` counter items and
+TTL'd `IKEY#…` dedupe items:
+
+```bash
+aws dynamodb scan --table-name <TableName-output> --region <region> --max-items 10
+```
+
+Tail the function logs if a call returns an unexpected `5xx`:
+
+```bash
+sam logs --stack-name <stack-name> --name GreeterFunction --region <region> --tail
+```
+
+### Tearing down
+
+Delete the stack to remove all provisioned resources (Lambda, HTTP API, DynamoDB
+table, IAM role, alarms, log group) and avoid ongoing charges:
+
+```bash
+sam delete --stack-name <stack-name> --region <region>
 ```
 
 ### Configuration

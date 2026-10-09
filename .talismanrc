@@ -56,7 +56,7 @@ fileignoreconfig:
 - filename: Gemfile.lock
   checksum: 0050915dd34618f84ecb631733dc288a3d518e2c77ec3e92ea7b2f4e394a6e23
 - filename: README.md
-  checksum: 403cfcb9b7349ef706c9ee1621ba6b46e44bd9547b5b1c4bac5edf6d18d47331
+  checksum: 08304bd7e381920147b7319a4ea24828f698ce8cca9ea401a38f29e5b4af9f67
 - filename: env.json.example
   checksum: c47854a93d461be8ceeb4f99d185ec7523b61623326e4d0742eed1d65d4100a5
 - filename: features/step_definitions/smoke_steps.rb

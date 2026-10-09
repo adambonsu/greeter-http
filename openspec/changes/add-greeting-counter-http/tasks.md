@@ -65,7 +65,7 @@ Keep every file RuboCop-clean and `frozen_string_literal: true`. Compose
 
 - [x] 10.1 Author `infra/template.yaml` (AWS SAM): Ruby 3.3 Lambda pointing at `adapters/lambda_handler`, HTTP API with a single `POST /greetings` route and route-level throttling; verify `sam validate` passes.
 - [x] 10.2 Define the DynamoDB table in the template: on-demand (pay-per-request) billing, PITR enabled, SSE enabled, and TTL on `expires_at`; pass the table name to the Lambda via environment; verify `sam validate` and that the TTL/PITR/SSE properties are present.
-- [x] 10.3 Scope the Lambda execution role to least privilege on that one table: `dynamodb:GetItem` and `dynamodb:TransactWriteItems` (the optimistic-lock write) only, resource-limited to the table ARN; verify no wildcard table/action remains in the rendered policy.
+- [x] 10.3 Scope the Lambda execution role to least privilege on that one table: `dynamodb:GetItem`, `dynamodb:PutItem`, `dynamodb:UpdateItem` only (DynamoDB authorizes the optimistic-lock `TransactWriteItems` by its underlying Put/Update actions, not by `TransactWriteItems` itself), resource-limited to the table ARN; verify no wildcard table/action remains in the rendered policy.
 - [x] 10.4 Enable X-Ray active tracing on the Lambda and set CloudWatch log retention to 14 days; verify both appear in `sam validate`/the synthesized template.
 - [x] 10.5 Add CloudWatch alarms on the HTTP API 5xx rate and p95 latency; verify the alarms synthesize with sensible thresholds and reference the right metrics.
 

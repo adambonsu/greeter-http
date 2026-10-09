@@ -49,7 +49,10 @@ module GreeterHttp
       rescue Ports::GreetingCounter::KeyReused
         error(409, 'idempotency_key_reused',
               'This Idempotency-Key was already used for a different request.')
-      rescue Ports::GreetingCounter::Unavailable
+      rescue Ports::GreetingCounter::Unavailable => e
+        # A genuine failure (not an expected 4xx) — log the cause so a 503 is
+        # diagnosable in CloudWatch, then return the client-safe response.
+        log_error('unavailable', e)
         unavailable
       rescue StandardError => e
         # Primary mapping of storage errors to a domain-neutral Unavailable
@@ -58,6 +61,7 @@ module GreeterHttp
         # (retryable) rather than a permanent 500, and never leak it to the
         # client. Matched by class-name shape so this adapter neither references
         # an Aws:: constant nor hard-depends on the SDK being loaded.
+        log_error('error', e)
         return unavailable if transient_service_error?(e)
 
         error(500, 'internal_error', 'An unexpected error occurred.')
@@ -65,6 +69,13 @@ module GreeterHttp
 
       def unavailable
         error(503, 'temporarily_unavailable', 'Please retry.', extra_headers: { 'retry-after' => '1' })
+      end
+
+      # Log a failed request to stderr (captured by CloudWatch) without leaking
+      # anything to the client. No request content (e.g. guest name) is logged.
+      def log_error(outcome, error)
+        frame = Array(error.backtrace).first
+        warn "[greeter-http] #{outcome}: #{error.class}: #{error.message}#{" @ #{frame}" if frame}"
       end
 
       # Matches any `Aws::<Service>::Errors::ServiceError` by ancestry name.
