@@ -1,0 +1,279 @@
+# .github/workflows/ci.yml
+#
+# Jobs
+# ────
+#  spec        – RSpec + SimpleCov HTML artifact          ┐
+#  bdd         – Cucumber + traceability.json artifact     │ parallel
+#  lint        – RuboCop                                   │
+#  security    – Brakeman + bundler-audit                  │
+#  integration – RSpec :integration vs DynamoDB Local      ┘
+#  spec-gate   – openspec validate (independent, blocks merge)
+#  release     – on v* tags only: sam build + packaged Lambda artifact
+#                (needs: all of the above)
+#
+# Ruby is pinned by the repo's .ruby-version (3.3.5); the Gemfile intentionally
+# carries no `ruby` directive so the Lambda ruby3.3 managed runtime is accepted
+# at deploy time.
+
+name: CI
+
+"on":
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["**"]
+
+# Cancel in-flight runs for the same ref so a fast-follow push doesn't queue.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUNDLE_JOBS: 4
+  BUNDLE_RETRY: 3
+  # Bundler must match `BUNDLED WITH` in Gemfile.lock.
+  BUNDLER_VERSION: "4.0.22"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# spec
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  spec:
+    name: RSpec
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - name: Create coverage directory
+        run: mkdir -p coverage
+
+      - name: Run RSpec (unit; :integration excluded without DYNAMODB_ENDPOINT)
+        run: bundle exec rspec --format progress --format html --out coverage/rspec.html
+
+      - name: Upload SimpleCov HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: simplecov-report
+          path: coverage/
+          retention-days: 14
+
+# ─────────────────────────────────────────────────────────────────────────────
+# bdd
+# ─────────────────────────────────────────────────────────────────────────────
+  bdd:
+    name: Cucumber BDD
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - name: Create tmp directory
+        run: mkdir -p tmp
+
+      # @smoke scenarios are skipped automatically (GREETER_BASE_URL unset).
+      - name: Run Cucumber
+        run: bundle exec cucumber --format progress
+
+      - name: Upload traceability report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: traceability-report
+          path: tmp/traceability.json
+          retention-days: 14
+
+# ─────────────────────────────────────────────────────────────────────────────
+# lint
+# ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: RuboCop
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - name: Run RuboCop
+        run: |
+          bundle check
+          bundle exec rubocop \
+            --config .rubocop.yml \
+            --format github \
+            --debug
+
+# ─────────────────────────────────────────────────────────────────────────────
+# security
+# ─────────────────────────────────────────────────────────────────────────────
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - name: Brakeman static analysis
+        run: bundle exec brakeman --no-pager -q -w2 --force
+
+      - name: bundler-audit CVE check
+        run: |
+          bundle exec bundle-audit update
+          bundle exec bundle-audit check
+
+# ─────────────────────────────────────────────────────────────────────────────
+# integration  (real DynamoDB adapter vs DynamoDB Local)
+#
+# Runs the :integration suite against a DynamoDB Local container started with
+# -sharedDb (so credential/region namespacing doesn't hide the table). The
+# suite creates and tears down its own table per run.
+# ─────────────────────────────────────────────────────────────────────────────
+  integration:
+    name: Integration (DynamoDB Local)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - name: Start DynamoDB Local (-sharedDb)
+        run: |
+          docker run --rm -d --name ddb-local -p 8000:8000 \
+            amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
+          # Wait until it answers before running the suite.
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://localhost:8000; then echo "ready"; break; fi
+            sleep 1
+          done
+
+      - name: Run integration specs
+        env:
+          DYNAMODB_ENDPOINT: http://localhost:8000
+          AWS_ACCESS_KEY_ID: local
+          AWS_SECRET_ACCESS_KEY: local
+          AWS_REGION: us-east-1
+        run: bundle exec rspec spec/integration --format progress
+
+      - name: Stop DynamoDB Local
+        if: always()
+        run: docker rm -f ddb-local || true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# spec-gate  (OpenSpec structural validation — blocks merge if malformed)
+# ─────────────────────────────────────────────────────────────────────────────
+  spec-gate:
+    name: OpenSpec validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install OpenSpec CLI
+        run: npm install --global @fission-ai/openspec
+
+      - name: Validate all OpenSpec changes
+        run: openspec validate --all --strict --json --no-interactive
+
+# ─────────────────────────────────────────────────────────────────────────────
+# release  (v* tags only — runs only if every other job passed)
+#
+# greeter-http deploys as an AWS Lambda, so the "release asset" is the packaged
+# SAM build artifact (the function code + its vendored gems) plus the template,
+# tarred and attached to a GitHub Release. On the GitHub Ubuntu runner the host
+# Ruby is 3.3.5 (via setup-ruby), matching the Lambda ruby3.3 runtime's ABI, so
+# a plain `sam build` vendors gems correctly — `--use-container` is only needed
+# locally when the host Ruby differs from the runtime.
+# ─────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Release Lambda artifact
+    runs-on: ubuntu-latest
+    needs: [spec, bdd, lint, security, integration, spec-gate]
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write   # required to create the Release and upload assets
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Build the Lambda artifact
+        run: sam build -t infra/template.yaml
+
+      # Record the greeter-core version this build resolved to (from the lock,
+      # the authoritative source) for the release notes.
+      - name: Resolve bundled greeter-core version
+        id: core
+        run: |
+          core_version="$(bundle exec ruby -e 'require "greeter/core"; print Greeter::Core::VERSION')"
+          echo "version=${core_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Package versioned Lambda artifact
+        run: |
+          version="${GITHUB_REF_NAME}"
+          pkg="greeter-http-${version}"
+          mkdir -p "dist/${pkg}"
+          # Ship the built function (code + vendored gems) and the SAM template.
+          cp -r .aws-sam/build "dist/${pkg}/build"
+          cp infra/template.yaml "dist/${pkg}/template.yaml"
+          cp README.md "dist/${pkg}/" 2>/dev/null || true
+          tar -czf "dist/${pkg}.tar.gz" -C dist "${pkg}"
+          ( cd dist && sha256sum "${pkg}.tar.gz" > "${pkg}.tar.gz.sha256" )
+          ls -l dist
+
+      - name: Create GitHub Release and upload the artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/greeter-http-${{ github.ref_name }}.tar.gz
+            dist/greeter-http-${{ github.ref_name }}.tar.gz.sha256
+          body: |
+            **greeter-http ${{ github.ref_name }}** — built against **greeter-core ${{ steps.core.outputs.version }}**.
+
+            The tarball contains the SAM build output (`build/`) and `template.yaml`.
+            Deploy with `sam deploy` against the included template. The exact pinned
+            dependency set is in the bundled `Gemfile.lock`.
+          generate_release_notes: true
+          fail_on_unmatched_files: true
