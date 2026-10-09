@@ -79,7 +79,7 @@ module GreeterHttp
       ENV.delete('AWS_SESSION_TOKEN')
       Aws::DynamoDB::Client.new(
         endpoint: endpoint,
-        region: ENV.fetch('AWS_REGION', 'us-east-1'),
+        region: ENV.fetch('AWS_REGION', 'eu-west-1'),
         credentials: Aws::Credentials.new('local', 'local')
       )
     end

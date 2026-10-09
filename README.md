@@ -124,8 +124,11 @@ it drives the real `DynamoDbGreetingCounter` against DynamoDB Local, with no
 Lambda-container credential plumbing in the way.
 
 ```bash
-# start DynamoDB Local
-docker run -p 8000:8000 amazon/dynamodb-local
+# Start DynamoDB Local with -sharedDb (entrypoint is `java`, so the jar and
+# flags come after the image name). The suite creates and tears down its own
+# table per run, so no manual table setup is needed here.
+docker run --rm -d --name ddb-local -p 8000:8000 \
+  amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
 
 DYNAMODB_ENDPOINT=http://localhost:8000 bundle exec rspec spec/integration
 ```
@@ -170,71 +173,86 @@ curl -i http://127.0.0.1:9292/greetings \
 Backend is chosen by `GREETER_BACKEND`:
 
 - `memory` (default) — in-memory counter, zero external dependencies.
-- `dynamodb` — the real DynamoDB adapter. Point it at DynamoDB Local (which the
-  host process reaches directly, no container networking):
+- `dynamodb` — the real DynamoDB adapter against DynamoDB Local (the host
+  process reaches it directly on `localhost`, no container networking). Three
+  one-time setup steps, then start the server:
 
   ```bash
-  docker run -p 8000:8000 amazon/dynamodb-local   # in another terminal
-  # create the table once (PK/SK, on-demand), then:
+  # 1. Start DynamoDB Local WITH -sharedDb. The image's entrypoint is `java`,
+  #    so the jar and its flags must come after the image name in this order.
+  #    Without -sharedDb, DynamoDB Local keys tables by access-key + region, so
+  #    the table you create below and the one the app looks for end up in
+  #    different namespaces and every request returns 503.
+  docker run --rm -d --name ddb-local -p 8000:8000 \
+    amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
+
+  # 2. Create the table (partition key PK, sort key SK, on-demand billing).
+  #    Any credentials work against DynamoDB Local; these are placeholders.
+  AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 \
+    aws dynamodb create-table --endpoint-url http://localhost:8000 \
+      --table-name greeter-http-local --billing-mode PAY_PER_REQUEST \
+      --attribute-definitions AttributeName=PK,AttributeType=S AttributeName=SK,AttributeType=S \
+      --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE
+
+  # 3. Start the server pointed at it. The startup banner echoes the backend,
+  #    table and endpoint so you can confirm the wiring.
   GREETER_BACKEND=dynamodb \
     GREETER_TABLE_NAME=greeter-http-local \
     GREETER_DYNAMODB_ENDPOINT=http://localhost:8000 \
     bundle exec rackup
   ```
 
+  A `503` from a `dynamodb`-backed server almost always means DynamoDB Local
+  isn't reachable, was started without `-sharedDb`, or the table is missing.
+
 What `rackup` does NOT cover: the Lambda handler, the packaged artifact, and API
 Gateway event translation. Use `sam local` (below) or a deploy to validate those.
 
 ### Locally with the SAM CLI
 
-This validates the packaged Lambda artifact and the event→Rack translation.
+This validates the packaged Lambda artifact and the event→Rack translation —
+the closest local mirror of production. Unlike the Rack path, the function runs
+inside a Lambda container, so reaching DynamoDB Local takes extra plumbing (all
+learned the hard way). Run the steps in order.
+
+**Step 1 — build the artifact** (always `--use-container`, see Building above):
 
 ```bash
 sam build --use-container -t infra/template.yaml
-sam local start-api -t .aws-sam/build/template.yaml   # note: the BUILT template
 ```
 
-Then call it:
+**Step 2 — start DynamoDB Local on a user-defined network, and create the
+table.** Two things matter here:
+
+- `-sharedDb` so DynamoDB Local ignores credential/region namespacing (otherwise
+  the function and your `aws` CLI see different tables). The image's entrypoint
+  is `java`, so the jar and its flags come after the image name.
+- A **user-defined** Docker network (`greeter-local`). The default `bridge`
+  network has no DNS, so the Lambda container could not resolve the DynamoDB
+  Local container by name.
 
 ```bash
-curl -i http://127.0.0.1:3000/greetings \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: demo-key-1' \
-  -d '{"name":"alice bonsu"}'
+docker network create greeter-local
+
+docker run --rm -d --name ddb-shared --network greeter-local -p 8000:8000 \
+  amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
+
+AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 \
+  aws dynamodb create-table --endpoint-url http://localhost:8000 \
+    --table-name greeter-http-local --billing-mode PAY_PER_REQUEST \
+    --attribute-definitions AttributeName=PK,AttributeType=S AttributeName=SK,AttributeType=S \
+    --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE
 ```
 
-Repeat the same command (same `Idempotency-Key`) and you'll get `200` with the
-same `count`. Change the key and the count increments. Change the body under an
-existing key and you'll get `409`.
+**Step 3 — create an `env.json`** so the function points at the DynamoDB Local
+container (by its name on the shared network). Copy the tracked template:
 
-Without a reachable DynamoDB the endpoint returns `503` (datastore unavailable);
-the rest of the pipeline still runs. To exercise the full path against DynamoDB
-Local through `sam local`, three things must line up (all learned the hard way):
+```bash
+cp env.json.example env.json
+```
 
-1. **DynamoDB Local must run with `-sharedDb`** so it ignores credential/region
-   namespacing (otherwise the function and your `aws` CLI see different tables).
-   The image's entrypoint is `java`, so the jar args come first:
-
-   ```bash
-   docker network create greeter-local
-   docker run --rm --name ddb-shared --network greeter-local -p 8000:8000 \
-     amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
-   # create the table once:
-   aws dynamodb create-table --endpoint-url http://localhost:8000 \
-     --table-name greeter-http-local --billing-mode PAY_PER_REQUEST \
-     --attribute-definitions AttributeName=PK,AttributeType=S AttributeName=SK,AttributeType=S \
-     --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE
-   ```
-
-2. **Both containers must share a user-defined network** (`--docker-network
-   greeter-local`). The default `bridge` network has no DNS, so the Lambda
-   container can only reach DynamoDB Local by name on a user-defined network.
-
-3. **`GREETER_DYNAMODB_ENDPOINT` must be declared in the template** (it is) so
-   SAM's `--env-vars` passes it through — SAM silently drops env-file keys that
-   aren't declared under the function's `Environment.Variables`.
-
-With an `env.json` like:
+`env.json` is gitignored (it is per-developer local config); `env.json.example`
+is the tracked starting point:
 
 ```json
 { "GreeterFunction": {
@@ -243,17 +261,43 @@ With an `env.json` like:
 } }
 ```
 
+`GREETER_DYNAMODB_ENDPOINT` is declared in the template, so SAM's `--env-vars`
+passes it through — SAM silently drops env-file keys that are not declared under
+the function's `Environment.Variables`.
+
+**Step 4 — run the service.** Pass the BUILT template, the `env.json`, and the
+same `--docker-network`. Either serve the HTTP API, or invoke the handler once
+with a fixture event:
+
 ```bash
+# Option A: run the HTTP API on :3000
+sam local start-api -t .aws-sam/build/template.yaml \
+  --env-vars env.json --docker-network greeter-local
+
+# then, in another terminal:
+curl -i http://127.0.0.1:3000/greetings \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-key-1' \
+  -d '{"name":"alice bonsu"}'
+```
+
+```bash
+# Option B: invoke the handler once with a canned event
 sam local invoke GreeterFunction -t .aws-sam/build/template.yaml \
   -e spec/fixtures/events/happy_path.json \
   --env-vars env.json --docker-network greeter-local
-# => 201 the first time, 200 (same count) on replay
 ```
 
-The composition root honors `GREETER_DYNAMODB_ENDPOINT` only for this local
-path (unset in real AWS, where the SDK resolves the regional endpoint and task
-credentials). For a quicker inner loop, the Rack path and the `:integration`
-suite both avoid this container plumbing entirely.
+Either way: `201` the first time, `200` (same count) on replay with the same
+`Idempotency-Key`; a new key increments the count; the same key with a different
+body returns `409`.
+
+If you omit the `--env-vars`/`--docker-network` flags (or skip step 2), the
+function can't reach DynamoDB and every request returns `503` — the rest of the
+pipeline still runs. The composition root honors `GREETER_DYNAMODB_ENDPOINT`
+only for this local path (unset in real AWS, where the SDK resolves the regional
+endpoint and task credentials). For a quicker inner loop, the Rack path and the
+`:integration` suite both avoid this container plumbing entirely.
 
 ### Invoking the handler directly
 

@@ -15,7 +15,7 @@ RSpec.describe 'GreeterHttp::Adapters::DynamoDbGreetingCounter', :integration do
     require 'aws-sdk-dynamodb'
     Aws::DynamoDB::Client.new(
       endpoint: endpoint,
-      region: ENV.fetch('AWS_REGION', 'us-east-1'),
+      region: ENV.fetch('AWS_REGION', 'eu-west-1'),
       access_key_id: ENV.fetch('AWS_ACCESS_KEY_ID', 'local'),
       secret_access_key: ENV.fetch('AWS_SECRET_ACCESS_KEY', 'local')
     )

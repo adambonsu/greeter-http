@@ -7,7 +7,7 @@
 *.gem
 
 # Ruby version managers
-.ruby-version
+# .ruby-version is intentionally tracked so the Ruby pin (3.3.x) is shared.
 .ruby-gemset
 .rvmrc
 
@@ -15,6 +15,8 @@
 .env
 .env.*
 !.env.example
+# Local sam-local env file (per-developer); copy from env.json.example.
+/env.json
 
 # Test & coverage artifacts
 /coverage/
