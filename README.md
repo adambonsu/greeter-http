@@ -149,7 +149,45 @@ and `sam deploy` against that **built** template.
 
 ## Interacting with the service
 
+### Locally with Rack (recommended for development)
+
+The service is a Rack app with a thin Lambda adapter on top, so for day-to-day
+development you can run the Rack app directly — no Lambda, no SAM, no container,
+no AWS credentials. This exercises the exact same routing, status codes,
+idempotency and JSON the deployed function uses.
+
+```bash
+bundle exec rackup          # in-memory counter (default), serves on :9292
+```
+
+```bash
+curl -i http://127.0.0.1:9292/greetings \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-key-1' \
+  -d '{"name":"alice bonsu"}'
+```
+
+Backend is chosen by `GREETER_BACKEND`:
+
+- `memory` (default) — in-memory counter, zero external dependencies.
+- `dynamodb` — the real DynamoDB adapter. Point it at DynamoDB Local (which the
+  host process reaches directly, no container networking):
+
+  ```bash
+  docker run -p 8000:8000 amazon/dynamodb-local   # in another terminal
+  # create the table once (PK/SK, on-demand), then:
+  GREETER_BACKEND=dynamodb \
+    GREETER_TABLE_NAME=greeter-http-local \
+    GREETER_DYNAMODB_ENDPOINT=http://localhost:8000 \
+    bundle exec rackup
+  ```
+
+What `rackup` does NOT cover: the Lambda handler, the packaged artifact, and API
+Gateway event translation. Use `sam local` (below) or a deploy to validate those.
+
 ### Locally with the SAM CLI
+
+This validates the packaged Lambda artifact and the event→Rack translation.
 
 ```bash
 sam build --use-container -t infra/template.yaml

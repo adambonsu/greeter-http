@@ -39,6 +39,20 @@ module GreeterHttp
       Adapters::LambdaHandler.new(app: build(greeting_counter: greeting_counter, clock: clock))
     end
 
+    # Build the Rack app choosing a counter backend from the environment. Used
+    # by config.ru for local development:
+    #   GREETER_BACKEND=memory   (default) in-memory counter, zero dependencies
+    #   GREETER_BACKEND=dynamodb DynamoDB-backed (needs GREETER_TABLE_NAME and,
+    #                            for DynamoDB Local, GREETER_DYNAMODB_ENDPOINT)
+    def build_from_env
+      case ENV.fetch('GREETER_BACKEND', 'memory')
+      when 'dynamodb'
+        build
+      else
+        build(greeting_counter: Adapters::InMemoryGreetingCounter.new)
+      end
+    end
+
     def default_counter(clock)
       Adapters::DynamoDbGreetingCounter.new(
         client: dynamodb_client,

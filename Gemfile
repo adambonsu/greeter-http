@@ -20,10 +20,12 @@ group :development, :test do
   gem 'bundler-audit', require: false   # dependency CVE audit
   gem 'cucumber', '~> 9.2'
   gem 'rack-test'
+  gem 'rackup', '~> 2.1'                # `rackup` CLI for local dev server (Rack 3 split-out)
   gem 'rspec', '~> 3.13'
   gem 'rubocop', require: false
   gem 'rubocop-rspec', require: false
   gem 'simplecov', require: false
+  gem 'webrick', '~> 1.8'               # dev server backend for rackup
 end
 
 # gem "rails"

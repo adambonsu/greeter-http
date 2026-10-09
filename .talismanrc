@@ -52,9 +52,9 @@ fileignoreconfig:
 - filename: .rubocop.yml
   checksum: 4764800bff9ce74eb2edbf568b00d5f840f2a33fe266ecb1b3da6d3b9c573290
 - filename: Gemfile.lock
-  checksum: cec87f7d79883fa8ec2cb3a5657b2894848589a2f4d064b03978a3efb31c5846
+  checksum: 0050915dd34618f84ecb631733dc288a3d518e2c77ec3e92ea7b2f4e394a6e23
 - filename: README.md
-  checksum: c58829e9e457856a47bfb13004bf086560897aaea06651a4f70f255ac732af41
+  checksum: c35152cdd100fa4d04ee3ef23a57cd5a18ab2bb296a30fd8ecfdd263c5c7fc65
 - filename: features/step_definitions/smoke_steps.rb
   checksum: cd9007cc8cf13fd8c6c2922d93ca061c6cf18287bf41f715008a50697cbf4e77
 - filename: features/support/env.rb
