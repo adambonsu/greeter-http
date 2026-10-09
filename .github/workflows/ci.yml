@@ -34,6 +34,10 @@ env:
   BUNDLE_RETRY: 3
   # Bundler must match `BUNDLED WITH` in Gemfile.lock.
   BUNDLER_VERSION: "4.0.22"
+  # Pin the OpenSpec CLI so the spec-gate is reproducible (a floating @latest
+  # can add rules that fail the gate with no change to the repo). Keep in sync
+  # with the locally installed version; bump deliberately.
+  OPENSPEC_VERSION: "1.14.1"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # spec
@@ -201,8 +205,8 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install OpenSpec CLI
-        run: npm install --global @fission-ai/openspec
+      - name: Install OpenSpec CLI (pinned)
+        run: npm install --global "@fission-ai/openspec@${{ env.OPENSPEC_VERSION }}"
 
       - name: Validate all OpenSpec changes
         run: openspec validate --all --strict --json --no-interactive

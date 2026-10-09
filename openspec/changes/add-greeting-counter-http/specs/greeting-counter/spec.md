@@ -10,12 +10,11 @@ guaranteeing that client retries never inflate the count.
 ### Requirement: Greet a guest and return a running count
 
 The system SHALL accept an HTTP request to greet a named guest and SHALL respond
-with a greeting for that guest together with the total number of times the guest
-has been greeted. The count SHALL increase by exactly one for each distinct
-greeting request accepted for that guest. Guest names SHALL be compared after the
-normalization defined by the greeting domain (whitespace trimmed, titlecased), so
-that names differing only by surrounding whitespace or letter case refer to the
-same guest and share one count.
+with a greeting together with the total number of times that guest has been
+greeted. The count SHALL increase by exactly one for each distinct greeting
+request accepted for a guest. Guest identity SHALL use the greeting domain's
+normalized name, so names differing only by surrounding whitespace or letter
+case refer to the same guest.
 
 #### Scenario: First greeting for a new guest
 

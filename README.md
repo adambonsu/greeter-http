@@ -357,3 +357,33 @@ GREETER_BASE_URL="$API_BASE_URL" bundle exec cucumber --tags @smoke
   has one `@requirement-greeting-counter` Cucumber scenario.
 - Collaborators are injected via keyword arguments; `app.rb` is the only
   composition root.
+
+### Bumping the OpenSpec CLI version
+
+The `spec-gate` CI job validates the OpenSpec change in `--strict` mode. The CLI
+version is **pinned** so the gate is reproducible: a floating `@latest` can add
+or tighten rules (e.g. the ">500 character requirement" check added in 1.14.1)
+and fail the gate with no change to the repo. The pin lives in one place —
+`OPENSPEC_VERSION` in `.github/workflows/ci.yml` — and must stay in sync with the
+version installed locally.
+
+OpenSpec is installed as an npm global package (not Homebrew), so bump it with
+npm, then re-pin and re-validate:
+
+```bash
+# 1. Upgrade (or install a specific version) locally.
+npm install --global @fission-ai/openspec@latest   # or @<version>
+
+# 2. Read the version you now have.
+openspec --version                                  # e.g. 1.14.1
+
+# 3. Re-validate against the new CLI BEFORE changing CI. Fix any new findings
+#    (newer versions may introduce stricter checks).
+openspec validate --all --strict --no-interactive
+
+# 4. Set OPENSPEC_VERSION in .github/workflows/ci.yml to that exact version,
+#    and commit the workflow change together with any spec fixes from step 3.
+```
+
+Keep the local upgrade and the `OPENSPEC_VERSION` bump in the **same commit** so
+CI and developer machines never drift apart.
