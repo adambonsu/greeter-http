@@ -18,6 +18,13 @@ Parameters:
   Latencyp95ThresholdMs:
     Type: Number
     Default: 1000
+  DynamoDbEndpoint:
+    Type: String
+    Default: ''
+    Description: >
+      Optional DynamoDB endpoint override for LOCAL development only (e.g.
+      DynamoDB Local via `sam local`). Leave empty in real AWS so the SDK
+      resolves the regional endpoint and task credentials.
 
 Globals:
   Function:
@@ -61,6 +68,7 @@ Resources:
         Variables:
           GREETER_TABLE_NAME: !Ref GreetingsTable
           GREETER_IDEMPOTENCY_TTL_SECONDS: !Ref IdempotencyTtlSeconds
+          GREETER_DYNAMODB_ENDPOINT: !Ref DynamoDbEndpoint
       # Least-privilege: read + the transactional conditional write only, scoped
       # to this one table's ARN. No wildcard table or action.
       Policies:

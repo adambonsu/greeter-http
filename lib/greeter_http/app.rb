@@ -72,8 +72,14 @@ module GreeterHttp
       endpoint = ENV.fetch('GREETER_DYNAMODB_ENDPOINT', nil)
       return Aws::DynamoDB::Client.new if endpoint.nil? || endpoint.empty?
 
+      # DynamoDB Local accepts any credentials but rejects a session token it
+      # cannot validate. Local runtimes (e.g. `sam local`) inject a placeholder
+      # AWS_SESSION_TOKEN that the SDK would otherwise attach to the request, so
+      # drop it on this local-only path before building the client.
+      ENV.delete('AWS_SESSION_TOKEN')
       Aws::DynamoDB::Client.new(
         endpoint: endpoint,
+        region: ENV.fetch('AWS_REGION', 'us-east-1'),
         credentials: Aws::Credentials.new('local', 'local')
       )
     end
