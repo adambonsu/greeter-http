@@ -161,19 +161,31 @@ GREETER_PERF_SAMPLES=10000 bundle exec ruby perf/http_bench.rb
 ### Deployed load test (opt-in)
 
 Set `GREETER_BASE_URL` to also run a Ruby-thread load generator (no k6 needed)
-against a real endpoint: 50 virtual users for 60s by default.
+against a real endpoint: 10 virtual users **rate-paced to ~25 req/s** for 60s by
+default.
 
 ```bash
 GREETER_BASE_URL="https://xxxxxxxxxx.execute-api.eu-west-2.amazonaws.com" \
   bundle exec ruby perf/http_bench.rb
 ```
 
-- **Gated**: fails if steady-state **p95 > 300 ms**, or >20% worse than baseline,
-  or if any request fails.
+The generator is **paced to the service's configured capacity** — the HttpApi
+stage throttles at `RouteThrottleRate` (25 req/s steady, 50 burst), so the test
+drives at that rate to measure latency under sustained rated load rather than
+overrunning the throttle. Each request targets a **distinct guest** so writes
+spread across DynamoDB partitions (real throughput, not single-item contention).
+
+- **Gated**: fails if steady-state **p95 > 300 ms**, >20% worse than baseline, or
+  if any request **hard-fails** (5xx, connection error, or a non-429 4xx).
+- **HTTP 429 is not a failure.** Any request throttled above the rate is counted
+  **separately as `throttled`** (expected backpressure) and reported, never
+  gated — so an accidental overrun shows up honestly instead of as a failure.
 - The first request's latency is reported **separately as the client-observed
   cold start** and excluded from the steady-state p95 (so a Lambda cold start
   never skews the gate).
-- Tunables: `GREETER_PERF_VUS` (default 50), `GREETER_PERF_DURATION_S` (60).
+- Tunables: `GREETER_PERF_RATE` (target req/s, default 25 — raise it to test a
+  higher capacity), `GREETER_PERF_VUS` (default 10), `GREETER_PERF_DURATION_S`
+  (default 60).
 
 ### The baseline
 
