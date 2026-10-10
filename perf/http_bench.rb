@@ -50,9 +50,15 @@ IN_PROCESS_SAMPLES = Integer(ENV.fetch('GREETER_PERF_SAMPLES', 50_000))
 # the absolute budget applies (mirrors greeter-cli's perf gate).
 NOISE_FLOOR_MS = 0.05
 
-# Deployed load parameters.
-VUS        = Integer(ENV.fetch('GREETER_PERF_VUS', 50))
+# Deployed load parameters. RATE is the target aggregate requests/second,
+# paced to the service's configured capacity (the HttpApi stage throttles at
+# RouteThrottleRate = 25 req/s). Driving at the rated limit measures latency
+# under sustained load; overrunning it just trips the 429 throttle. Override
+# GREETER_PERF_RATE to test a different capacity. A modest VU count is enough
+# to sustain 25 req/s with headroom for per-request latency.
+VUS        = Integer(ENV.fetch('GREETER_PERF_VUS', 10))
 DURATION_S = Integer(ENV.fetch('GREETER_PERF_DURATION_S', 60))
+RATE       = Integer(ENV.fetch('GREETER_PERF_RATE', 25))
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -158,19 +164,34 @@ else
   require_relative 'load'
   puts
   puts '=' * 64
-  puts "Deployed load: #{VUS} VUs for #{DURATION_S}s against #{base_url}"
+  puts "Deployed load: #{VUS} VUs, ~#{RATE} req/s target for #{DURATION_S}s against #{base_url}"
   puts '=' * 64
 
-  deployed = GreeterHttp::Perf::Load.run(base_url: base_url, vus: VUS, duration_s: DURATION_S)
+  deployed = GreeterHttp::Perf::Load.run(base_url: base_url, vus: VUS, duration_s: DURATION_S, rate: RATE)
 
-  puts format('  requests        : %d (%d ok, %d failed)', deployed[:total], deployed[:ok], deployed[:failed])
+  puts format('  requests        : %d (%d ok, %d throttled, %d failed)',
+              deployed[:total], deployed[:ok], deployed[:throttled], deployed[:failed])
+  unless deployed[:failure_reasons].empty?
+    puts '  failure breakdown:'
+    deployed[:failure_reasons].each do |reason, count|
+      puts format('    %-28s : %d', reason, count)
+    end
+  end
   puts format('  cold start      : %.1f ms (first request, client-observed)', deployed[:cold_start_ms])
   puts format('  steady-state p50: %.1f ms', deployed[:p50_ms])
   puts format('  steady-state p95: %.1f ms (cold start excluded)', deployed[:p95_ms])
   puts format('  steady-state p99: %.1f ms', deployed[:p99_ms])
 
+  # HTTP 429 is expected backpressure above the configured rate, not a failure:
+  # reported, never gated. Only hard failures (5xx, connection errors, non-429
+  # 4xx) and the latency budget fail the run.
+  if deployed[:throttled].positive?
+    puts format('  note: %d requests throttled (HTTP 429) — expected above ~%d req/s, not counted as failures',
+                deployed[:throttled], RATE)
+  end
   if deployed[:failed].positive?
-    failures << format('%d of %d deployed requests failed', deployed[:failed], deployed[:total])
+    failures << format('%d of %d deployed requests hard-failed (%s)',
+                       deployed[:failed], deployed[:total], deployed[:failure_reasons].keys.join(', '))
   end
   if deployed[:p95_ms] >= DEPLOYED_BUDGET_MS
     failures << format('deployed p95 %.1f ms exceeds %.1f ms budget', deployed[:p95_ms], DEPLOYED_BUDGET_MS)

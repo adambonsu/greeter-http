@@ -60,6 +60,9 @@ Metrics/AbcSize:
     - 'perf/**/*'
 Metrics/ClassLength:
   Max: 150
+Metrics/ModuleLength:
+  Exclude:
+    - 'perf/**/*'
 Metrics/CyclomaticComplexity:
   Max: 10
 Metrics/PerceivedComplexity:
