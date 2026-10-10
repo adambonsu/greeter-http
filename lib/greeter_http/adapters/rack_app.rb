@@ -14,11 +14,18 @@ module GreeterHttp
     class RackApp
       JSON_HEADERS = { 'content-type' => 'application/json' }.freeze
 
+      # Hard cap on the request body. The only valid payload is a tiny JSON
+      # object ({"name": "..."}) whose name is bounded by the core at 64 chars,
+      # so a few KB is generous. Caps unbounded reads so a malicious client
+      # cannot exhaust memory with a giant body before validation runs.
+      MAX_BODY_BYTES = 8 * 1024
+
       # @param use_case [#call] GreetAndCount (keyword call: raw_name:, idempotency_key:)
       # @param presenter [#present] a GreetingPresenter adapter
-      def initialize(use_case:, presenter:)
+      def initialize(use_case:, presenter:, max_body_bytes: MAX_BODY_BYTES)
         @use_case = use_case
         @presenter = presenter
+        @max_body_bytes = max_body_bytes
       end
 
       def call(env)
@@ -42,6 +49,8 @@ module GreeterHttp
 
         result = @use_case.call(raw_name: name, idempotency_key: key)
         success(result)
+      rescue PayloadTooLarge
+        error(413, 'payload_too_large', 'Request body is too large.')
       rescue MalformedRequest
         error(400, 'malformed_request', 'Request body is not valid JSON.')
       rescue Greeter::Core::Domain::InvalidGuestName => e
@@ -86,19 +95,36 @@ module GreeterHttp
       end
 
       class MalformedRequest < StandardError; end
+      class PayloadTooLarge < StandardError; end
 
       def idempotency_key(request)
         request.get_header('HTTP_IDEMPOTENCY_KEY')
       end
 
       def parse_name(request)
-        body = request.body ? request.body.read : ''
-        parsed = JSON.parse(body.to_s.empty? ? '{}' : body)
+        body = read_capped_body(request)
+        parsed = JSON.parse(body.empty? ? '{}' : body)
         raise MalformedRequest unless parsed.is_a?(Hash)
 
         parsed['name'].to_s
       rescue JSON::ParserError
         raise MalformedRequest
+      end
+
+      # Read the body with a hard byte cap. Checks the declared CONTENT_LENGTH
+      # first (cheap reject), then reads at most max+1 bytes so a client that
+      # lies about or omits Content-Length still cannot stream an unbounded body
+      # into memory.
+      def read_capped_body(request)
+        declared = request.content_length.to_i
+        raise PayloadTooLarge if declared > @max_body_bytes
+
+        return '' unless request.body
+
+        body = request.body.read(@max_body_bytes + 1).to_s
+        raise PayloadTooLarge if body.bytesize > @max_body_bytes
+
+        body
       end
 
       def success(result)

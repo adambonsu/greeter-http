@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# iam-check — least-privilege gate for the SAM template's IAM policy.
+#
+# Fails (exit 1) if the GreeterFunction's inline policy:
+#   * uses a "*" wildcard in any Action or Resource, OR
+#   * grants any DynamoDB action outside the allowed set, OR
+#   * grants access to any resource other than the GreetingsTable ARN.
+#
+# Allowed actions. The counter write is a TransactWriteItems of a Put (dedupe
+# item) + an Update (counter); DynamoDB authorizes a transaction by its
+# UNDERLYING item actions, so PutItem and UpdateItem are both REQUIRED, not a
+# privilege excess. GetItem covers the pre-read and the replay read. This is
+# the minimal set the service needs — nothing more.
+#
+# (The task framing said "UpdateItem/GetItem on GreeterGreetings". The real
+# template needs PutItem too for the transactional dedupe Put, and the table's
+# logical id is GreetingsTable — so the allowlist is Get/Put/UpdateItem and the
+# resource is matched by the GreetingsTable ref, not a literal name.)
+#
+# Pure stdlib (no cfn/yaml gems required): the template is scanned textually
+# for the function's Policies block. This keeps the check runnable anywhere
+# (CI, pre-commit) without the AWS toolchain installed.
+
+require 'set'
+
+TEMPLATE = File.expand_path('../infra/template.yaml', __dir__)
+
+ALLOWED_ACTIONS = %w[
+  dynamodb:GetItem
+  dynamodb:PutItem
+  dynamodb:UpdateItem
+].to_set.freeze
+
+# The one resource the policy may reference: this stack's table, by ref.
+ALLOWED_RESOURCE_REFS = [
+  '!GetAtt GreetingsTable.Arn',
+  'Fn::GetAtt: [GreetingsTable, Arn]',
+  'Fn::GetAtt:'  # tolerated only when the GetAtt targets GreetingsTable (checked below)
+].freeze
+
+def fail_with(messages)
+  warn 'iam-check: FAIL'
+  messages.each { |m| warn "  - #{m}" }
+  exit 1
+end
+
+abort "iam-check: template not found at #{TEMPLATE}" unless File.file?(TEMPLATE)
+
+text = File.read(TEMPLATE)
+problems = []
+
+# --- 1. No "*" wildcard anywhere in an Action or Resource line --------------
+# Catch `Action: "*"`, `- "*"` under Action/Resource, `Resource: '*'`, etc.
+text.each_line.with_index(1) do |line, no|
+  stripped = line.strip
+  next if stripped.start_with?('#')
+
+  # A bare "*" as an Action or Resource value, with or without quotes.
+  if stripped.match?(/\A(Action|Resource)\s*:\s*['"]?\*['"]?\s*\z/) ||
+     stripped.match?(/\A-\s*['"]?\*['"]?\s*\z/)
+    problems << "wildcard '*' in IAM Action/Resource at line #{no}: #{stripped}"
+  end
+end
+
+# --- 2. Every dynamodb: action listed must be in the allowlist --------------
+# Collect every `dynamodb:Xxx` token appearing in the file.
+actions_found = text.scan(/dynamodb:[A-Za-z]+/).to_set
+disallowed = actions_found - ALLOWED_ACTIONS
+unless disallowed.empty?
+  problems << "DynamoDB action(s) beyond the allowed GetItem/PutItem/UpdateItem: #{disallowed.to_a.sort.join(', ')}"
+end
+
+# Any non-dynamodb service action in a policy statement is also out of scope
+# for this least-privilege function (e.g. s3:, kms:, "*:*").
+other_actions = text.scan(/^\s*-\s*([a-z0-9-]+:[A-Za-z*]+)/).flatten.reject { |a| a.start_with?('dynamodb:') }
+unless other_actions.empty?
+  problems << "non-DynamoDB IAM action(s) present: #{other_actions.uniq.sort.join(', ')}"
+end
+
+# --- 3. Resource must reference GreetingsTable only -------------------------
+# Find Resource: lines; each must point at the GreetingsTable ARN.
+resource_lines = text.each_line.with_index(1).select { |l, _| l.strip.start_with?('Resource:') }
+resource_lines.each do |line, no|
+  value = line.strip.sub(/\AResource:\s*/, '')
+  ok = value.include?('GreetingsTable') && value.include?('Arn')
+  problems << "Resource at line #{no} does not scope to GreetingsTable's ARN: #{value}" unless ok
+end
+problems << 'no IAM Resource line found (expected a GreetingsTable ARN scope)' if resource_lines.empty?
+
+fail_with(problems) unless problems.empty?
+
+puts 'iam-check: PASS — policy is least-privilege (GetItem/PutItem/UpdateItem on GreetingsTable, no wildcards).'
