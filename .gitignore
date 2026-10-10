@@ -24,6 +24,12 @@
 /.rspec_status
 rspec_examples.txt
 
+# Perf baseline is a PER-ENVIRONMENT measurement (laptop vs CI runner differ),
+# recorded on first run and cached per-branch in CI. Committing it would make
+# one machine's numbers the baseline for all, causing false cross-environment
+# regression failures.
+/perf/baseline.json
+
 # RuboCop cache
 /.rubocop-cache/
 .rubocop-https*

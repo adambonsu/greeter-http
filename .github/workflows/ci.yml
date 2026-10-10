@@ -200,9 +200,10 @@ jobs:
 # handler.call report. The deployed p95 load test is deliberately excluded from
 # push-triggered CI (it needs a live endpoint); run it on demand / post-deploy.
 #
-# The baseline is cached PER BRANCH so the 20% regression check compares against
-# a baseline recorded on the SAME (CI) hardware
-# actions/cache writes the key back when it is new.
+# The baseline is NOT committed (it is per-environment: laptop and CI runner
+# produce different numbers). It is cached per OS + branch so the 20% regression
+# check always compares against a baseline recorded on the same hardware class;
+# the first run on a fresh cache writes it, and actions/cache persists it.
 # ─────────────────────────────────────────────────────────────────────────────
   perf:
     name: Performance benchmark
@@ -222,9 +223,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: perf/baseline.json
-          key: perf-baseline-${{ github.ref_name }}-v1
+          # Scope the baseline to the runner OS as well as the branch: the
+          # regression check is only meaningful against a baseline recorded on
+          # the same hardware class, so never restore one from a different OS.
+          key: perf-baseline-${{ runner.os }}-${{ github.ref_name }}-v1
           restore-keys: |
-            perf-baseline-${{ github.ref_name }}-
+            perf-baseline-${{ runner.os }}-${{ github.ref_name }}-
 
       - name: Run in-process benchmark (fails on budget breach or >20% regression)
         run: bundle exec ruby perf/http_bench.rb
