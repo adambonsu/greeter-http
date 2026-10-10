@@ -133,6 +133,79 @@ docker run --rm -d --name ddb-local -p 8000:8000 \
 DYNAMODB_ENDPOINT=http://localhost:8000 bundle exec rspec spec/integration
 ```
 
+## Performance benchmarks
+
+`perf/http_bench.rb` has two regimes. The in-process one needs only Ruby; the
+deployed one needs a live endpoint and is opt-in.
+
+### In-process (default)
+
+```bash
+bundle exec ruby perf/http_bench.rb
+```
+
+Measures two paths and prints a `benchmark-ips` throughput report plus p99
+latencies:
+
+- **`GreetAndCount#call`** — the pure business logic. **Gated**: fails if p99 >
+  **10 ms**, or if p99 is **>20% worse** than the recorded baseline.
+- **`LambdaHandler#call`** — the full event→response path. **Reported only**
+  (not gated); its in-process tail is too noise-dominated to police fairly.
+
+Sample count is tunable for a quicker local run:
+
+```bash
+GREETER_PERF_SAMPLES=10000 bundle exec ruby perf/http_bench.rb
+```
+
+### Deployed load test (opt-in)
+
+Set `GREETER_BASE_URL` to also run a Ruby-thread load generator (no k6 needed)
+against a real endpoint: 50 virtual users for 60s by default.
+
+```bash
+GREETER_BASE_URL="https://xxxxxxxxxx.execute-api.eu-west-2.amazonaws.com" \
+  bundle exec ruby perf/http_bench.rb
+```
+
+- **Gated**: fails if steady-state **p95 > 300 ms**, or >20% worse than baseline,
+  or if any request fails.
+- The first request's latency is reported **separately as the client-observed
+  cold start** and excluded from the steady-state p95 (so a Lambda cold start
+  never skews the gate).
+- Tunables: `GREETER_PERF_VUS` (default 50), `GREETER_PERF_DURATION_S` (60).
+
+### The baseline
+
+The first run writes `perf/baseline.json`; later runs compare against it and
+fail on a >20% regression of a gated metric.
+
+> `perf/baseline.json` is **git-ignored on purpose** — it is a per-environment
+> measurement (a laptop and a CI runner produce very different numbers, so a
+> committed baseline would cause false cross-environment regression failures).
+> Each environment records and keeps its own; CI caches it per OS + branch.
+
+In **CI**, the `perf` job runs the in-process regime on every push with a
+per-OS/branch cached baseline. The deployed load test is deliberately **not** in
+push CI (it needs a live endpoint) — run it manually or in a post-deploy step.
+
+### Cold-start Init Duration (report only)
+
+`perf/cloudwatch_init_duration.rb` fetches the Lambda's authoritative
+`Init Duration` from CloudWatch Logs and reports min/mean/max/p95 — a different
+figure from the client-observed cold start above (it is just the runtime init
+phase). It is a **reporter, not a gate**: it prints and never fails. Needs AWS
+credentials and a deployed stack; defaults to the `greeter-dev` profile and
+`eu-west-2`:
+
+```bash
+STACK=sam-app AWS_PROFILE=greeter-dev AWS_REGION=eu-west-2 \
+  bundle exec ruby perf/cloudwatch_init_duration.rb
+```
+
+If no cold starts occurred in the window (the function stayed warm), it says so
+and exits cleanly — trigger one by deploying, then re-run.
+
 ## Building
 
 > **Always build with `--use-container`.** The Ruby bundle (including
