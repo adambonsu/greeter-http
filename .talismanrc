@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: .github/workflows/ci.yml
-  checksum: 9fa8d19095bce10d8b0afe308179edfbfd0b1f56954a07c1bbeeeaa9a820ac8b
+  checksum: c9a3b8cb291b350cdca2d4b30d14a8af990054be973c480a4ee02340e9d44358
 - filename: .kiro/prompts/opsx-continue.prompt.md
   checksum: e85c9fb03a8d32ba394c81ad9b71d9214fbfe4965deaf15f1e896bb13714912a
 - filename: .kiro/prompts/opsx-update.prompt.md

@@ -46,19 +46,18 @@ USE_CASE_BUDGET_MS = 10.0    # GATED: GreetAndCount#call p99 > 10 ms fails
 DEPLOYED_BUDGET_MS = 300.0   # GATED: deployed steady-state p95 > 300 ms fails
 REGRESSION_THRESHOLD = 1.20  # >20% worse than baseline fails
 IN_PROCESS_SAMPLES = Integer(ENV.fetch('GREETER_PERF_SAMPLES', 50_000))
-# Below this a relative regression check is dominated by clock jitter, so only
-# the absolute budget applies (mirrors greeter-cli's perf gate).
-NOISE_FLOOR_MS = 0.05
 
-# The >20% regression check compares against a per-environment baseline. On
-# shared CI runners a sub-5 ms microbenchmark's run-to-run p99 noise routinely
-# exceeds 20% (a quiet run records ~1.5 ms, a busy run measures ~3.4 ms), so the
-# relative check flaps against a lucky-fast cached baseline while telling us
-# nothing real. The ABSOLUTE budget (USE_CASE_BUDGET_MS) is the stable signal
-# there. Set GREETER_PERF_NO_REGRESSION=1 (CI does) to run the absolute gate
-# only and still refresh the baseline; leave it unset locally, where the
-# environment is stable enough for the relative check to be meaningful.
-REGRESSION_CHECK = ENV['GREETER_PERF_NO_REGRESSION'].to_s.empty?
+# Floor for the relative (>20%) regression check. The check only runs when BOTH
+# the baseline and the current p99 are at or above this floor. Rationale: a
+# percentage threshold is only meaningful once the absolute numbers are large
+# enough that 20% of them exceeds measurement noise. GreetAndCount#call runs in
+# a few milliseconds, and sub-5 ms p99s swing far more than 20% run-to-run on
+# any machine (a quiet sample ~1.5 ms, a busy one ~3.4 ms is a 2x "regression"
+# that means nothing). Below the floor the ABSOLUTE budget (USE_CASE_BUDGET_MS)
+# is the only gate; at or above it, a 20% jump is a real signal worth failing on.
+# This runs everywhere — CI runners are a more consistent hardware class than a
+# laptop in daily use, so there is no reason to gate it by environment.
+REGRESSION_FLOOR_MS = Float(ENV.fetch('GREETER_PERF_REGRESSION_FLOOR_MS', 5.0))
 
 # Deployed load parameters. RATE is the target aggregate requests/second,
 # paced to the service's configured capacity (the HttpApi stage throttles at
@@ -220,7 +219,16 @@ results = {
 results['deployed_p95_ms'] = deployed[:p95_ms].round(3) if deployed
 
 def check_regression(label, current, baseline_val, failures)
-  return if baseline_val.nil? || baseline_val < NOISE_FLOOR_MS
+  return if baseline_val.nil?
+
+  # Only police the ratio once both numbers clear the floor; below it, 20% is
+  # within noise and the absolute budget is the real guard.
+  if baseline_val < REGRESSION_FLOOR_MS || current < REGRESSION_FLOOR_MS
+    puts format('  %s: below %.1f ms floor (cur %.4f, base %.4f) — ratio check skipped',
+                label, REGRESSION_FLOOR_MS, current, baseline_val)
+    return
+  end
+
   return unless current > baseline_val * REGRESSION_THRESHOLD
 
   failures << format(
@@ -233,24 +241,16 @@ if File.exist?(BASELINE_PATH)
   baseline = JSON.parse(File.read(BASELINE_PATH))
 
   puts
-  if REGRESSION_CHECK
-    puts '=' * 64
-    puts "Regression check (threshold: >#{((REGRESSION_THRESHOLD - 1) * 100).round}% worse than baseline)"
-    puts '=' * 64
-    if baseline['use_case_p99_ms']
-      puts format('  baseline GreetAndCount#call p99 : %.4f ms', baseline['use_case_p99_ms'])
-    end
-    if baseline['deployed_p95_ms']
-      puts format('  baseline deployed p95           : %.1f ms',
-                  baseline['deployed_p95_ms'])
-    end
+  puts '=' * 64
+  puts "Regression check (threshold: >#{((REGRESSION_THRESHOLD - 1) * 100).round}% worse " \
+       "than baseline, floor #{format('%.1f', REGRESSION_FLOOR_MS)} ms)"
+  puts '=' * 64
+  puts format('  baseline GreetAndCount#call p99 : %.4f ms', baseline['use_case_p99_ms']) if baseline['use_case_p99_ms']
+  puts format('  baseline deployed p95           : %.1f ms', baseline['deployed_p95_ms']) if baseline['deployed_p95_ms']
 
-    # Only the gated metrics are regression-checked (handler p99 is informational).
-    check_regression('GreetAndCount#call p99', use_case_p99, baseline['use_case_p99_ms'], failures)
-    check_regression('deployed p95', deployed[:p95_ms], baseline['deployed_p95_ms'], failures) if deployed
-  else
-    puts 'Regression check skipped (GREETER_PERF_NO_REGRESSION set) — absolute budget only.'
-  end
+  # Only the gated metrics are regression-checked (handler p99 is informational).
+  check_regression('GreetAndCount#call p99', use_case_p99, baseline['use_case_p99_ms'], failures)
+  check_regression('deployed p95', deployed[:p95_ms], baseline['deployed_p95_ms'], failures) if deployed
 
   # Merge: keep an existing deployed baseline when this run was in-process only,
   # so an in-process CI run doesn't erase the deployed baseline (and vice versa).

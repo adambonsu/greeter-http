@@ -196,19 +196,19 @@ jobs:
 # perf  (in-process only; the deployed load test is NOT run here)
 #
 # Runs perf/http_bench.rb with GREETER_BASE_URL unset, so only the in-process
-# regime executes: the GreetAndCount#call p99 gate (10 ms absolute budget) and
-# the informational handler.call report. The deployed p95 load test is
-# deliberately excluded from push-triggered CI (it needs a live endpoint); run
-# it on demand / post-deploy.
+# regime executes: the GreetAndCount#call p99 gate (10 ms absolute budget), the
+# informational handler.call report, and the >20% relative regression check.
+# The deployed p95 load test is deliberately excluded from push-triggered CI (it
+# needs a live endpoint); run it on demand / post-deploy.
 #
-# Only the ABSOLUTE budget is enforced here. The >20% relative regression check
-# is disabled in CI (GREETER_PERF_NO_REGRESSION): a sub-5 ms microbenchmark on a
-# shared GitHub runner has run-to-run p99 noise well over 20% (a quiet run
-# records ~1.5 ms, a busy one ~3.4 ms), so a baseline captured on a lucky-fast
-# run makes every normal run look like a regression. The absolute 10 ms gate is
-# the stable signal on this hardware. The relative check still runs locally,
-# where the environment is steady — so there is no per-environment baseline to
-# cache here.
+# Two gates apply, and the regression check is floored, not disabled: it only
+# compares the ratio when both the baseline and current p99 clear
+# REGRESSION_FLOOR_MS (5 ms). GreetAndCount#call runs in a few ms, so in
+# practice it sits below the floor and the stable absolute 10 ms budget governs;
+# the ratio check bites only if the number ever grows into floor territory,
+# where a 20% jump is a real signal. This runs on CI (a consistent hardware
+# class) as well as locally. The baseline is NOT committed (per-environment); it
+# is cached per OS + branch so a comparison is always same-hardware-class.
 # ─────────────────────────────────────────────────────────────────────────────
   perf:
     name: Performance benchmark
@@ -224,9 +224,19 @@ jobs:
           bundler: ${{ env.BUNDLER_VERSION }}
           bundler-cache: true
 
-      - name: Run in-process benchmark (absolute p99 budget gate)
-        env:
-          GREETER_PERF_NO_REGRESSION: "1"
+      - name: Restore perf baseline cache
+        uses: actions/cache@v5
+        with:
+          path: perf/baseline.json
+          # Scope to the runner OS as well as the branch: a baseline is only a
+          # fair comparison against one recorded on the same hardware class.
+          # The leading "v2-" is the cache-schema version — bump it to discard
+          # all previously cached baselines (e.g. after changing the gate).
+          key: perf-baseline-v2-${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            perf-baseline-v2-${{ runner.os }}-
+
+      - name: Run in-process benchmark (absolute budget + floored regression check)
         run: bundle exec ruby perf/http_bench.rb
 
 # ─────────────────────────────────────────────────────────────────────────────
