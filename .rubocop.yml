@@ -19,11 +19,12 @@ AllCops:
 Style/Documentation:
   Enabled: false
 
-# Specs and features are inherently long / multi-step.
+# Specs, features and perf scripts are inherently long / multi-step.
 Metrics/BlockLength:
   Exclude:
     - 'spec/**/*'
     - 'features/**/*'
+    - 'perf/**/*'
 
 RSpec/SpecFilePathFormat:
   Enabled: false
@@ -51,23 +52,32 @@ Lint/UnusedMethodArgument:
 # to pragmatic values that still catch genuine bloat.
 Metrics/MethodLength:
   Max: 25
+  Exclude:
+    - 'perf/**/*'
 Metrics/AbcSize:
   Max: 25
+  Exclude:
+    - 'perf/**/*'
 Metrics/ClassLength:
   Max: 150
 Metrics/CyclomaticComplexity:
   Max: 10
 Metrics/PerceivedComplexity:
   Max: 10
+  Exclude:
+    - 'perf/**/*'
 
 # `pk`, `now` and similar short names are idiomatic here (DynamoDB partition
-# key, current time).
+# key, current time); `n`/`p`/`r` are iteration/percentile locals in perf scripts.
 Naming/MethodParameterName:
   AllowedNames:
     - pk
     - sk
     - now
     - to
+    - n
+    - p
+    - r
 
 # ---------------------------------------------------------------------------
 # Specs and features
@@ -102,3 +112,9 @@ Lint/UselessTimes:
 Style/StringConcatenation:
   Exclude:
     - 'features/**/*'
+
+# Benchmark harnesses (perf/) are printf-heavy (many `%.4f` latency formats);
+# annotated tokens would only bloat them. They are standalone scripts.
+Style/FormatStringToken:
+  Exclude:
+    - 'perf/**/*'

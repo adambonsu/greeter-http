@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: .github/workflows/ci.yml
-  checksum: 88f4d1d8b44c42bab3edcb94561f53d695454f24c8d33bd5b46080fc252c8c2d
+  checksum: 34b5c81f2074dfaa77442dbea769d461ae96f87ba64cd406033672e5252b9465
 - filename: .kiro/prompts/opsx-continue.prompt.md
   checksum: e85c9fb03a8d32ba394c81ad9b71d9214fbfe4965deaf15f1e896bb13714912a
 - filename: .kiro/prompts/opsx-update.prompt.md
@@ -52,7 +52,7 @@ fileignoreconfig:
 - filename: .kiro/skills/openspec-onboard/SKILL.md
   checksum: 38eeb268db4d998d69ed374a9b6c7cb0f55540210e498e3da0808d63615b4bd0
 - filename: .rubocop.yml
-  checksum: 4764800bff9ce74eb2edbf568b00d5f840f2a33fe266ecb1b3da6d3b9c573290
+  checksum: 105232f388caae629d30c624ba681ad5f6001e6e93ac558d39fb172da43989d5
 - filename: Gemfile.lock
   checksum: 0050915dd34618f84ecb631733dc288a3d518e2c77ec3e92ea7b2f4e394a6e23
 - filename: README.md
@@ -85,6 +85,12 @@ fileignoreconfig:
   checksum: 1e4d0f6ee3f89457c55b3d818568bccd4bcf264943ab7a394b1bcb88c6551633
 - filename: openspec/changes/add-greeting-counter-http/design.md
   checksum: e809dd27ac46c39a28e478de3418701714ed64581f901441620b69de0bbe62d2
+- filename: perf/http_bench.rb
+  checksum: fb6fe61e814be384a6d52c6d22e2b99eb692053d80343d45b4608013785af93a
+- filename: perf/load.rb
+  checksum: ad4eab6dbb516c7a821a7d01969afe4ec213d303abf4dad0eefaf3bdf15248e2
+- filename: perf/profile_paths.rb
+  checksum: 9893c741495f264f9121e5995b88b7a02791861f8d01513ae847e28c6adc9cf4  
 - filename: spec/adapters/in_memory_greeting_counter_spec.rb
   checksum: 94a5dbccc4b4ddf52571b9fcdb5e91a6c566d0f389c44db22ebb1d28b1f56b7a
 - filename: spec/application/greet_and_count_spec.rb
