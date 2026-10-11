@@ -35,9 +35,54 @@ Globals:
 
 Resources:
 
+  # --- Customer-managed KMS key --------------------------------------------
+  # One CMK encrypts the Lambda environment variables (CKV_AWS_173), the
+  # function log group and the API access-log group (CKV_AWS_158). The key
+  # policy grants: the account root full admin (so the key is manageable), the
+  # CloudWatch Logs service principal the operations it needs to encrypt log
+  # streams (without this grant, log delivery to an encrypted group silently
+  # fails), and the function role decrypt for its env vars (granted inline on
+  # the role via the Lambda service at runtime; see the function policy).
+  EncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: greeter-http CMK for logs and Lambda env var encryption.
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowCloudWatchLogs
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: '*'
+            Condition:
+              ArnLike:
+                'kms:EncryptionContext:aws:logs:arn': !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+
   # --- DynamoDB table: counter items + TTL'd dedupe items -------------------
   GreetingsTable:
     Type: AWS::DynamoDB::Table
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_119
+            comment: >-
+              Greeting counts are non-sensitive; AWS-owned SSE (SSEEnabled
+              below) is sufficient. A customer-managed CMK adds key cost and
+              management overhead with no confidentiality benefit here.
     Properties:
       BillingMode: PAY_PER_REQUEST          # on-demand
       AttributeDefinitions:
@@ -59,11 +104,36 @@ Resources:
         SSEEnabled: true
 
   # --- Lambda function ------------------------------------------------------
+  # Suppressions below are deliberate design choices, not oversights (see each
+  # comment). Encryption (env vars) and logging are addressed, not skipped.
   GreeterFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_117
+            comment: >-
+              Not in a VPC by design — the function only calls DynamoDB over the
+              public AWS endpoint; a VPC adds cold-start latency and NAT cost
+              with no security gain for this workload.
+          - id: CKV_AWS_116
+            comment: >-
+              No DLQ — invoked synchronously by API Gateway (request/response).
+              DLQs apply only to async invocations; failures return to the
+              caller as HTTP 5xx.
+          - id: CKV_AWS_115
+            comment: >-
+              No reserved concurrency — backpressure is handled at the API
+              Gateway stage throttle (RouteThrottleRate), a deliberate design
+              choice; a function-level reservation is a different, unneeded
+              lever here.
     Properties:
       Handler: lambda_function.handler
       CodeUri: ../
+      # CKV_AWS_173: encrypt environment variables at rest with the CMK. The env
+      # vars hold no secrets (table name, TTL, optional local endpoint), but a
+      # CMK is cheap here and satisfies the control.
+      KmsKeyArn: !GetAtt EncryptionKey.Arn
       Environment:
         Variables:
           GREETER_TABLE_NAME: !Ref GreetingsTable
@@ -86,6 +156,12 @@ Resources:
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
               Resource: !GetAtt GreetingsTable.Arn
+            # Decrypt the CMK that protects this function's env vars. Scoped to
+            # the one key ARN; Decrypt only (the runtime never encrypts).
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: !GetAtt EncryptionKey.Arn
       Events:
         PostGreeting:
           Type: HttpApi
@@ -94,14 +170,23 @@ Resources:
             Path: /greetings
             Method: POST
 
-  # Lambda log group with 14-day retention.
+  # Lambda log group with 14-day retention, CMK-encrypted (CKV_AWS_158).
   GreeterFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${GreeterFunction}
       RetentionInDays: 14
+      KmsKeyId: !GetAtt EncryptionKey.Arn
 
-  # --- HTTP API with route-level throttling ---------------------------------
+  # Access-log group for the HTTP API, CMK-encrypted (CKV_AWS_158).
+  HttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/apigateway/greeter-http-access
+      RetentionInDays: 14
+      KmsKeyId: !GetAtt EncryptionKey.Arn
+
+  # --- HTTP API with route-level throttling + access logging ----------------
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -109,6 +194,17 @@ Resources:
       DefaultRouteSettings:
         ThrottlingBurstLimit: !Ref RouteThrottleBurst
         ThrottlingRateLimit: !Ref RouteThrottleRate
+      # CKV_AWS_95: access logging to the CMK-encrypted group above. One JSON
+      # line per request; no request/response bodies (so no guest name is
+      # logged), only routing/latency/status metadata.
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp",
+          "requestTime":"$context.requestTime","httpMethod":"$context.httpMethod",
+          "routeKey":"$context.routeKey","status":"$context.status",
+          "protocol":"$context.protocol","responseLength":"$context.responseLength",
+          "integrationLatency":"$context.integrationLatency"}
 
   # --- CloudWatch alarms ----------------------------------------------------
   Http5xxAlarm:

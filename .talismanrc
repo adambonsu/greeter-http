@@ -1,8 +1,6 @@
 fileignoreconfig:
 - filename: .github/workflows/ci.yml
   checksum: eac5aa94d69f890302fb06ee8478798bb73be02564ba23daa4b4891d854b8245
-- filename: bin/iam-check
-  checksum: af601cfec74eee72a4db4c71a86bc831b5b6b834bdba35a8e7e15eecdf611b36
 - filename: spec/security/http_security_spec.rb
   checksum: 77ff48c901c3d0f87fdfaed914f441dad09b85427fe837ff9e2e3bd0fbbbbab2
 - filename: .kiro/prompts/opsx-continue.prompt.md
@@ -63,10 +61,14 @@ fileignoreconfig:
   checksum: 08304bd7e381920147b7319a4ea24828f698ce8cca9ea401a38f29e5b4af9f67
 - filename: env.json.example
   checksum: c47854a93d461be8ceeb4f99d185ec7523b61623326e4d0742eed1d65d4100a5
+- filename: bin/iam-check
+  checksum: 70c512b3f9e7a95e95c20ab0b0bf5c3d1b3eb61809e290fcbe1c809ad1a2f941
 - filename: features/step_definitions/smoke_steps.rb
   checksum: cd9007cc8cf13fd8c6c2922d93ca061c6cf18287bf41f715008a50697cbf4e77
 - filename: features/support/env.rb
   checksum: 8a53a245f11f6278c458910d947564839734d7236eb851e9e8299b76b0c92abb
+- filename: infra/template.yaml
+  checksum: 8ab40b40ea48c79d8b25f9d66a2cdcdac34b52a0907080b292f81a49cb870477
 - filename: lib/greeter_http/adapters/in_memory_greeting_counter.rb
   checksum: 42805d5b81672d04692c2d8b31b93ae0eb4f8fe77d666095d826f2b5083a4290
 - filename: lib/greeter_http/adapters/rack_app.rb
