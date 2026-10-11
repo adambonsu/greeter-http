@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: .github/workflows/ci.yml
-  checksum: c9a3b8cb291b350cdca2d4b30d14a8af990054be973c480a4ee02340e9d44358
+  checksum: eac5aa94d69f890302fb06ee8478798bb73be02564ba23daa4b4891d854b8245
 - filename: bin/iam-check
   checksum: af601cfec74eee72a4db4c71a86bc831b5b6b834bdba35a8e7e15eecdf611b36
 - filename: spec/security/http_security_spec.rb

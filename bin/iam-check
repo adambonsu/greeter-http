@@ -23,8 +23,6 @@
 # for the function's Policies block. This keeps the check runnable anywhere
 # (CI, pre-commit) without the AWS toolchain installed.
 
-require 'set'
-
 TEMPLATE = File.expand_path('../infra/template.yaml', __dir__)
 
 ALLOWED_ACTIONS = %w[
@@ -32,13 +30,6 @@ ALLOWED_ACTIONS = %w[
   dynamodb:PutItem
   dynamodb:UpdateItem
 ].to_set.freeze
-
-# The one resource the policy may reference: this stack's table, by ref.
-ALLOWED_RESOURCE_REFS = [
-  '!GetAtt GreetingsTable.Arn',
-  'Fn::GetAtt: [GreetingsTable, Arn]',
-  'Fn::GetAtt:'  # tolerated only when the GetAtt targets GreetingsTable (checked below)
-].freeze
 
 def fail_with(messages)
   warn 'iam-check: FAIL'
@@ -75,9 +66,7 @@ end
 # Any non-dynamodb service action in a policy statement is also out of scope
 # for this least-privilege function (e.g. s3:, kms:, "*:*").
 other_actions = text.scan(/^\s*-\s*([a-z0-9-]+:[A-Za-z*]+)/).flatten.reject { |a| a.start_with?('dynamodb:') }
-unless other_actions.empty?
-  problems << "non-DynamoDB IAM action(s) present: #{other_actions.uniq.sort.join(', ')}"
-end
+problems << "non-DynamoDB IAM action(s) present: #{other_actions.uniq.sort.join(', ')}" unless other_actions.empty?
 
 # --- 3. Resource must reference GreetingsTable only -------------------------
 # Find Resource: lines; each must point at the GreetingsTable ARN.

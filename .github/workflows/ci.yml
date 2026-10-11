@@ -1,16 +1,25 @@
 # .github/workflows/ci.yml
 #
-# Jobs
-# ────
-#  spec        – RSpec + SimpleCov HTML artifact          ┐
-#  bdd         – Cucumber + traceability.json artifact     │ parallel
-#  lint        – RuboCop                                   │
-#  security    – Brakeman + bundler-audit                  │
-#  integration – RSpec :integration vs DynamoDB Local      ┘
-#  perf        – in-process benchmark (p99 gate + regression, needs: spec)
-#  spec-gate   – openspec validate (independent, blocks merge)
-#  release     – on v* tags only: sam build + packaged Lambda artifact
-#                (needs: all of the above)
+# Staged pipeline: lint runs first (cheap gate, fails fast); once it is green
+# the four check groups run in PARALLEL, and all of them feed release. Arrows
+# are `needs:` edges:
+#
+#            ┌── functional ──┐
+#   lint ────┼── spec-gate ───┼── release (v* tags only)
+#            ├── perf ────────┤
+#            └── security ────┘
+#
+#   lint        – RuboCop. Runs first; nothing else starts until it is green.
+#   functional  – RSpec (unit + security specs), Cucumber BDD, integration vs
+#                 DynamoDB Local.            needs: lint
+#   spec-gate   – openspec validate.         needs: lint
+#   perf        – in-process benchmark (p99 budget + regression).
+#                                            needs: lint
+#   security    – Brakeman, bundler-audit, iam-check, security-scan
+#                 (cfn-lint + checkov, STRICT).
+#                                            needs: lint
+#   release     – on v* tags only: sam build + packaged Lambda artifact.
+#                 needs: perf, functional, spec-gate, security
 #
 # Ruby is pinned by the repo's .ruby-version (3.3.5); the Gemfile intentionally
 # carries no `ruby` directive so the Lambda ruby3.3 managed runtime is accepted
@@ -40,73 +49,12 @@ env:
   # with the locally installed version; bump deliberately.
   OPENSPEC_VERSION: "1.14.1"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# spec
-# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  spec:
-    name: RSpec
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: .ruby-version
-          bundler: ${{ env.BUNDLER_VERSION }}
-          bundler-cache: true
-
-      - name: Create coverage directory
-        run: mkdir -p coverage
-
-      - name: Run RSpec (unit; :integration excluded without DYNAMODB_ENDPOINT)
-        run: bundle exec rspec --format progress --format html --out coverage/rspec.html
-
-      - name: Upload SimpleCov HTML report
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: simplecov-report
-          path: coverage/
-          retention-days: 14
-
-# ─────────────────────────────────────────────────────────────────────────────
-# bdd
-# ─────────────────────────────────────────────────────────────────────────────
-  bdd:
-    name: Cucumber BDD
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: .ruby-version
-          bundler: ${{ env.BUNDLER_VERSION }}
-          bundler-cache: true
-
-      - name: Create tmp directory
-        run: mkdir -p tmp
-
-      # @smoke scenarios are skipped automatically (GREETER_BASE_URL unset).
-      - name: Run Cucumber
-        run: bundle exec cucumber --format progress
-
-      - name: Upload traceability report
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: traceability-report
-          path: tmp/traceability.json
-          retention-days: 14
-
-# ─────────────────────────────────────────────────────────────────────────────
-# lint
-# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+# LINTING
+# ═════════════════════════════════════════════════════════════════════════════
   lint:
-    name: RuboCop
+    name: Linting (RuboCop)
     runs-on: ubuntu-latest
 
     steps:
@@ -126,12 +74,18 @@ jobs:
             --format github \
             --debug
 
-# ─────────────────────────────────────────────────────────────────────────────
-# security
-# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+# SECURITY
+#
+# Static analysis + dependency CVEs + the IaC/least-privilege gates. cfn-lint
+# and checkov are installed here (they are not in the Ruby bundle), and
+# security-scan runs with STRICT=1 so a missing scanner fails the job rather
+# than silently skipping a gate.
+# ═════════════════════════════════════════════════════════════════════════════
   security:
-    name: Security scan
+    name: Security
     runs-on: ubuntu-latest
+    needs: lint
 
     steps:
       - uses: actions/checkout@v5
@@ -141,79 +95,36 @@ jobs:
           ruby-version: .ruby-version
           bundler: ${{ env.BUNDLER_VERSION }}
           bundler-cache: true
+
+      - name: Install IaC scanners (cfn-lint, checkov)
+        run: pipx install cfn-lint checkov || pip install --user cfn-lint checkov
 
       - name: Brakeman static analysis
         run: bundle exec brakeman --no-pager -q -w2 --force
 
-      - name: bundler-audit CVE check
-        run: |
-          bundle exec bundle-audit update
-          bundle exec bundle-audit check
+      - name: IAM least-privilege gate
+        run: ruby bin/iam-check
 
-# ─────────────────────────────────────────────────────────────────────────────
-# integration  (real DynamoDB adapter vs DynamoDB Local)
-#
-# Runs the :integration suite against a DynamoDB Local container started with
-# -sharedDb (so credential/region namespacing doesn't hide the table). The
-# suite creates and tears down its own table per run.
-# ─────────────────────────────────────────────────────────────────────────────
-  integration:
-    name: Integration (DynamoDB Local)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: .ruby-version
-          bundler: ${{ env.BUNDLER_VERSION }}
-          bundler-cache: true
-
-      - name: Start DynamoDB Local (-sharedDb)
-        run: |
-          docker run --rm -d --name ddb-local -p 8000:8000 \
-            amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
-          # Wait until it answers before running the suite.
-          for i in $(seq 1 30); do
-            if curl -s -o /dev/null http://localhost:8000; then echo "ready"; break; fi
-            sleep 1
-          done
-
-      - name: Run integration specs
+      - name: Aggregate security scanners (bundle-audit + cfn-lint + checkov)
         env:
-          DYNAMODB_ENDPOINT: http://localhost:8000
-          AWS_ACCESS_KEY_ID: local
-          AWS_SECRET_ACCESS_KEY: local
-          AWS_REGION: us-east-1
-        run: bundle exec rspec spec/integration --format progress
+          STRICT: "1"
+        run: ./bin/security-scan
 
-      - name: Stop DynamoDB Local
-        if: always()
-        run: docker rm -f ddb-local || true
-
-# ─────────────────────────────────────────────────────────────────────────────
-# perf  (in-process only; the deployed load test is NOT run here)
+# ═════════════════════════════════════════════════════════════════════════════
+# PERFORMANCE
 #
-# Runs perf/http_bench.rb with GREETER_BASE_URL unset, so only the in-process
-# regime executes: the GreetAndCount#call p99 gate (10 ms absolute budget), the
-# informational handler.call report, and the >20% relative regression check.
-# The deployed p95 load test is deliberately excluded from push-triggered CI (it
-# needs a live endpoint); run it on demand / post-deploy.
-#
-# Two gates apply, and the regression check is floored, not disabled: it only
-# compares the ratio when both the baseline and current p99 clear
-# REGRESSION_FLOOR_MS (5 ms). GreetAndCount#call runs in a few ms, so in
-# practice it sits below the floor and the stable absolute 10 ms budget governs;
-# the ratio check bites only if the number ever grows into floor territory,
-# where a 20% jump is a real signal. This runs on CI (a consistent hardware
-# class) as well as locally. The baseline is NOT committed (per-environment); it
-# is cached per OS + branch so a comparison is always same-hardware-class.
-# ─────────────────────────────────────────────────────────────────────────────
+# In-process only; the deployed load test is NOT run here (it needs a live
+# endpoint — run it on demand / post-deploy). The GreetAndCount#call p99 gate is
+# an absolute 10 ms budget; the >20% relative regression check is floored (it
+# only compares the ratio when both baseline and current p99 clear
+# REGRESSION_FLOOR_MS = 5 ms), so sub-5 ms noise never trips it. The baseline is
+# NOT committed (per-environment); it is cached per OS + branch so a comparison
+# is always same-hardware-class.
+# ═════════════════════════════════════════════════════════════════════════════
   perf:
-    name: Performance benchmark
+    name: Performance
     runs-on: ubuntu-latest
-    needs: spec
+    needs: lint
 
     steps:
       - uses: actions/checkout@v5
@@ -239,12 +150,84 @@ jobs:
       - name: Run in-process benchmark (absolute budget + floored regression check)
         run: bundle exec ruby perf/http_bench.rb
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+# FUNCTIONAL TESTS
+#
+# The behavioural suite in one job: RSpec (unit + security specs; :integration
+# is excluded until DYNAMODB_ENDPOINT is set), Cucumber BDD, then the
+# integration specs against a DynamoDB Local container (-sharedDb so
+# credential/region namespacing doesn't hide the table; the suite creates and
+# tears down its own table per run).
+# ═════════════════════════════════════════════════════════════════════════════
+  functional:
+    name: Functional tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler: ${{ env.BUNDLER_VERSION }}
+          bundler-cache: true
+
+      - name: Create coverage and tmp directories
+        run: mkdir -p coverage tmp
+
+      - name: RSpec (unit + security; :integration excluded)
+        run: bundle exec rspec --format progress --format html --out coverage/rspec.html
+
+      # @smoke scenarios are skipped automatically (GREETER_BASE_URL unset).
+      - name: Cucumber BDD
+        run: bundle exec cucumber --format progress
+
+      - name: Start DynamoDB Local (-sharedDb)
+        run: |
+          docker run --rm -d --name ddb-local -p 8000:8000 \
+            amazon/dynamodb-local -jar DynamoDBLocal.jar -inMemory -sharedDb
+          # Wait until it answers before running the suite.
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://localhost:8000; then echo "ready"; break; fi
+            sleep 1
+          done
+
+      - name: Integration specs (DynamoDB Local)
+        env:
+          DYNAMODB_ENDPOINT: http://localhost:8000
+          AWS_ACCESS_KEY_ID: local
+          AWS_SECRET_ACCESS_KEY: local
+          AWS_REGION: us-east-1
+        run: bundle exec rspec spec/integration --format progress
+
+      - name: Stop DynamoDB Local
+        if: always()
+        run: docker rm -f ddb-local || true
+
+      - name: Upload SimpleCov HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: simplecov-report
+          path: coverage/
+          retention-days: 14
+
+      - name: Upload traceability report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: traceability-report
+          path: tmp/traceability.json
+          retention-days: 14
+
+# ═════════════════════════════════════════════════════════════════════════════
 # spec-gate  (OpenSpec structural validation — blocks merge if malformed)
-# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
   spec-gate:
     name: OpenSpec validate
     runs-on: ubuntu-latest
+    needs: lint
 
     steps:
       - uses: actions/checkout@v5
@@ -259,8 +242,8 @@ jobs:
       - name: Validate all OpenSpec changes
         run: openspec validate --all --strict --json --no-interactive
 
-# ─────────────────────────────────────────────────────────────────────────────
-# release  (v* tags only — runs only if every other job passed)
+# ═════════════════════════════════════════════════════════════════════════════
+# release  (v* tags only — runs only if every group + spec-gate passed)
 #
 # greeter-http deploys as an AWS Lambda, so the "release asset" is the packaged
 # SAM build artifact (the function code + its vendored gems) plus the template,
@@ -268,11 +251,11 @@ jobs:
 # Ruby is 3.3.5 (via setup-ruby), matching the Lambda ruby3.3 runtime's ABI, so
 # a plain `sam build` vendors gems correctly — `--use-container` is only needed
 # locally when the host Ruby differs from the runtime.
-# ─────────────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
   release:
     name: Release Lambda artifact
     runs-on: ubuntu-latest
-    needs: [spec, bdd, lint, security, integration, perf, spec-gate]
+    needs: [perf, functional, spec-gate, security]
     if: startsWith(github.ref, 'refs/tags/v')
 
     permissions:

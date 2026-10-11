@@ -20,6 +20,18 @@ module GreeterHttp
       # cannot exhaust memory with a giant body before validation runs.
       MAX_BODY_BYTES = 8 * 1024
 
+      # HTML / template / escape metacharacters rejected at the HTTP boundary
+      # BEFORE the name reaches the core. A greeting service must echo the name
+      # back ("Hello, <name>!"), so these characters have no place in a real
+      # name and their only purpose in a request is a reflected-XSS or
+      # template-injection probe (<script>, "><img>, {{7*7}}). The response is
+      # already JSON-encoded (so such input is inert in a JSON client), but we
+      # reject it outright as defense-in-depth for any consumer that mishandles
+      # the body. Apostrophes and hyphens are deliberately NOT included so real
+      # names like O'Brien and Jean-Luc are accepted. The core gem is composed,
+      # never modified, so this guard lives here at the adapter boundary.
+      FORBIDDEN_NAME_CHARS = /[<>{}\\]/
+
       # @param use_case [#call] GreetAndCount (keyword call: raw_name:, idempotency_key:)
       # @param presenter [#present] a GreetingPresenter adapter
       def initialize(use_case:, presenter:, max_body_bytes: MAX_BODY_BYTES)
@@ -46,6 +58,7 @@ module GreeterHttp
         return error(400, 'missing_idempotency_key', 'Idempotency-Key header is required.') if key.nil? || key.empty?
 
         name = parse_name(request)
+        reject_hostile_name!(name)
 
         result = @use_case.call(raw_name: name, idempotency_key: key)
         success(result)
@@ -53,6 +66,9 @@ module GreeterHttp
         error(413, 'payload_too_large', 'Request body is too large.')
       rescue MalformedRequest
         error(400, 'malformed_request', 'Request body is not valid JSON.')
+      rescue DisallowedName
+        # Static message — never echo the offending input back to the client.
+        error(422, 'invalid_name', 'Name contains disallowed characters.')
       rescue Greeter::Core::Domain::InvalidGuestName => e
         error(422, 'invalid_name', e.message)
       rescue Ports::GreetingCounter::KeyReused
@@ -96,6 +112,13 @@ module GreeterHttp
 
       class MalformedRequest < StandardError; end
       class PayloadTooLarge < StandardError; end
+      class DisallowedName < StandardError; end
+
+      # Reject names carrying HTML/template/escape metacharacters at the
+      # boundary, before the core or the counter ever see them.
+      def reject_hostile_name!(name)
+        raise DisallowedName if name.match?(FORBIDDEN_NAME_CHARS)
+      end
 
       def idempotency_key(request)
         request.get_header('HTTP_IDEMPOTENCY_KEY')

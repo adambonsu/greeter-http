@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#
+# security-scan — aggregate security scanners for greeter-http.
+#
+#   1. bundle-audit  — Ruby dependency CVE audit (Gemfile.lock)
+#   2. cfn-lint      — CloudFormation/SAM linter over infra/
+#   3. checkov       — IaC misconfiguration scanner over infra/
+#
+# Each scanner is run only if present. A MISSING scanner is reported and, by
+# default, treated as a soft skip (exit stays 0 for that tool) so the script is
+# useful on a laptop that has only some tools installed. In CI, set STRICT=1 to
+# make a missing scanner a hard failure, so the pipeline can't silently skip a
+# gate because a tool wasn't provisioned.
+#
+# Exit status: non-zero if any scanner that ran reported findings, or if STRICT
+# is set and a required scanner is missing.
+#
+# Usage:
+#   bin/security-scan          # run available scanners, skip missing ones
+#   STRICT=1 bin/security-scan # also fail if any scanner is missing (CI)
+
+set -uo pipefail
+
+cd "$(dirname "$0")/.." || exit 2
+
+STRICT="${STRICT:-0}"
+INFRA_DIR="infra"
+TEMPLATE="${INFRA_DIR}/template.yaml"
+
+failures=0
+missing=0
+
+section() { printf '\n=== %s ===\n' "$1"; }
+
+# have <cmd> — true if a runnable scanner is available. bundle-audit is run via
+# bundler so it is always available when the bundle is installed; the IaC tools
+# are standalone binaries that may or may not be present.
+run_or_skip() {
+  local name="$1"; shift
+  if ! command -v "$1" >/dev/null 2>&1; then
+    printf '  SKIP: %s not installed.\n' "$name"
+    missing=$((missing + 1))
+    if [ "$STRICT" = "1" ]; then
+      printf '  (STRICT) treating missing %s as a failure.\n' "$name"
+      failures=$((failures + 1))
+    fi
+    return
+  fi
+  if "$@"; then
+    printf '  OK: %s found no issues.\n' "$name"
+  else
+    printf '  FAIL: %s reported issues.\n' "$name"
+    failures=$((failures + 1))
+  fi
+}
+
+section "bundle-audit (dependency CVEs)"
+# Run through bundler so the project's pinned bundle-audit is used. Refresh the
+# advisory DB first; a refresh failure (e.g. offline) should not mask a scan.
+if bundle exec ruby -e 'require "bundler/audit"' >/dev/null 2>&1; then
+  bundle exec bundle-audit update || printf '  WARN: advisory DB update failed; scanning with the existing DB.\n'
+  if bundle exec bundle-audit check; then
+    printf '  OK: bundle-audit found no vulnerable gems.\n'
+  else
+    printf '  FAIL: bundle-audit reported vulnerable gems.\n'
+    failures=$((failures + 1))
+  fi
+else
+  printf '  SKIP: bundle-audit not available in the bundle.\n'
+  missing=$((missing + 1))
+  [ "$STRICT" = "1" ] && failures=$((failures + 1))
+fi
+
+section "cfn-lint (${TEMPLATE})"
+run_or_skip "cfn-lint" cfn-lint "$TEMPLATE"
+
+section "checkov (${INFRA_DIR}/)"
+# Quiet, compact output; scan the infra directory for IaC misconfigurations.
+run_or_skip "checkov" checkov --quiet --compact -d "$INFRA_DIR"
+
+section "summary"
+printf '  scanners with findings : %d\n' "$failures"
+printf '  scanners missing       : %d (STRICT=%s)\n' "$missing" "$STRICT"
+
+if [ "$failures" -gt 0 ]; then
+  printf '\nsecurity-scan: FAIL\n'
+  exit 1
+fi
+printf '\nsecurity-scan: PASS\n'
+exit 0
