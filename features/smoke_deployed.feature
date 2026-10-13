@@ -6,11 +6,15 @@ Feature: Deployed smoke test
   scenario is skipped (see the Before hook for @smoke in the step definitions),
   so a normal local run never attempts a network call.
 
+  # The count is a persistent, per-guest running total in DynamoDB, so it is NOT
+  # 1 on re-runs against a used environment. Assert it is present and positive
+  # rather than an exact value; the idempotent-replay scenario below covers the
+  # count's correctness under retry.
   Scenario: A greeting succeeds against the deployed service
     Given the deployed base URL from GREETER_BASE_URL
     When I POST a greeting for "alice bonsu" with a fresh idempotency key
     Then the HTTP status is 201
-    And the JSON body has a "count" of 1
+    And the JSON body "count" is a positive integer
     And the JSON body "guest_name" is "Alice Bonsu"
 
   Scenario: Retrying a request against the deployed service does not double-count

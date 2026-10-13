@@ -56,6 +56,12 @@ Then('the JSON body has a {string} of {int}') do |key, value|
   expect(JSON.parse(@response.body).fetch(key)).to eq(value)
 end
 
+Then('the JSON body {string} is a positive integer') do |key|
+  value = JSON.parse(@response.body).fetch(key)
+  expect(value).to be_a(Integer)
+  expect(value).to be_positive
+end
+
 Then('the JSON body {string} is {string}') do |key, value|
   expect(JSON.parse(@response.body).fetch(key)).to eq(value)
 end
