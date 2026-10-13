@@ -21,11 +21,13 @@ module GreeterHttp
 
     # Build the Rack application.
     #
-    # @param greeting_counter [Ports::GreetingCounter, nil] injected counter;
-    #   when nil, a DynamoDB-backed counter is constructed from the environment.
+    # @param greeting_counter [Ports::GreetingCounter, nil] injected counter.
+    #   When nil, a DynamoDB-backed counter is constructed from the environment
+    #   — this is the low-level composer's fallback. Prefer build_handler /
+    #   build_from_env (which honor GREETER_BACKEND) over relying on this.
     # @param clock [#now] clock port; defaults to the system clock.
     def build(greeting_counter: nil, clock: Adapters::SystemClock.new)
-      counter = greeting_counter || default_counter(clock)
+      counter = greeting_counter || dynamodb_counter(clock)
       service = Greeter::Core::Domain::GreetingService.new(clock: clock)
       use_case = Application::GreetAndCount.new(
         greeting_service: service,
@@ -35,25 +37,45 @@ module GreeterHttp
     end
 
     # Build the Lambda handler wrapping the Rack app (production entry point).
+    #
+    # When no counter is injected (the deployed case), the backend is chosen by
+    # GREETER_BACKEND exactly as the local server does — the datastore is NOT
+    # hardcoded to DynamoDB. The default when GREETER_BACKEND is unset differs
+    # by entry point: Lambda defaults to 'dynamodb' (a serverless function needs
+    # durable, shared state), while config.ru defaults to 'memory' (zero-setup
+    # local dev). Set GREETER_BACKEND to swap stores in either runtime.
     def build_handler(greeting_counter: nil, clock: Adapters::SystemClock.new)
-      Adapters::LambdaHandler.new(app: build(greeting_counter: greeting_counter, clock: clock))
+      counter = greeting_counter || counter_from_env(default: 'dynamodb', clock: clock)
+      Adapters::LambdaHandler.new(app: build(greeting_counter: counter, clock: clock))
     end
 
     # Build the Rack app choosing a counter backend from the environment. Used
-    # by config.ru for local development:
-    #   GREETER_BACKEND=memory   (default) in-memory counter, zero dependencies
-    #   GREETER_BACKEND=dynamodb DynamoDB-backed (needs GREETER_TABLE_NAME and,
-    #                            for DynamoDB Local, GREETER_DYNAMODB_ENDPOINT)
-    def build_from_env
-      case ENV.fetch('GREETER_BACKEND', 'memory')
+    # by config.ru for local development; defaults to the in-memory store.
+    def build_from_env(clock: Adapters::SystemClock.new)
+      build(greeting_counter: counter_from_env(default: 'memory', clock: clock), clock: clock)
+    end
+
+    # The single place that maps GREETER_BACKEND to a concrete GreetingCounter
+    # adapter. Add a new datastore here (e.g. 'postgres', 'redis') and it is
+    # immediately selectable from both entry points. `default` is used when
+    # GREETER_BACKEND is unset, so each entry point keeps its own sensible
+    # default while sharing one selection mechanism.
+    #
+    # @return [Ports::GreetingCounter]
+    def counter_from_env(default:, clock: Adapters::SystemClock.new)
+      backend = ENV.fetch('GREETER_BACKEND', default)
+      case backend
+      when 'memory'
+        Adapters::InMemoryGreetingCounter.new
       when 'dynamodb'
-        build
+        dynamodb_counter(clock)
       else
-        build(greeting_counter: Adapters::InMemoryGreetingCounter.new)
+        raise ArgumentError,
+              "unknown GREETER_BACKEND=#{backend.inspect} (expected one of: memory, dynamodb)"
       end
     end
 
-    def default_counter(clock)
+    def dynamodb_counter(clock)
       Adapters::DynamoDbGreetingCounter.new(
         client: dynamodb_client,
         table_name: ENV.fetch('GREETER_TABLE_NAME'),

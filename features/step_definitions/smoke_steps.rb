@@ -41,6 +41,13 @@ When('I POST the same greeting again with idempotency key {string}') do |key|
   @response = smoke_post(@base_url, 'carol kay', key)
 end
 
+When('I POST a greeting with a body larger than the cap') do
+  # Well-formed JSON whose name far exceeds the server's MAX_BODY_BYTES (8 KiB),
+  # so the only reason to reject is size — a 413, not a 400/422.
+  oversized = 'a' * (64 * 1024)
+  @response = smoke_post(@base_url, oversized, SecureRandom.uuid)
+end
+
 Then('the HTTP status is {int}') do |status|
   expect(@response.code.to_i).to eq(status)
 end
@@ -55,4 +62,8 @@ end
 
 Then('the JSON body {string} equals the first smoke response count') do |key|
   expect(JSON.parse(@response.body).fetch(key)).to eq(@first_smoke_count)
+end
+
+Then('the response body does not contain {string}') do |needle|
+  expect(@response.body).not_to include(needle)
 end

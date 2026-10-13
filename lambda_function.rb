@@ -17,6 +17,11 @@ $LOAD_PATH.unshift(File.expand_path('lib', __dir__))
 
 require 'greeter_http'
 
+# Startup banner (cold start): emit the service version to the Lambda log so a
+# deployed build is identifiable in CloudWatch. The dev-server banner lives in
+# config.ru, which Lambda never loads — this is the production equivalent.
+warn "[greeter-http] version=#{GreeterHttp::VERSION}"
+
 HANDLER = GreeterHttp::App.build_handler
 
 # @param event [Hash] API Gateway HTTP API (payload format 2.0) event

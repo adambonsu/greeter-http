@@ -99,6 +99,8 @@ fileignoreconfig:
   checksum: 9893c741495f264f9121e5995b88b7a02791861f8d01513ae847e28c6adc9cf4  
 - filename: spec/adapters/in_memory_greeting_counter_spec.rb
   checksum: 94a5dbccc4b4ddf52571b9fcdb5e91a6c566d0f389c44db22ebb1d28b1f56b7a
+- filename: spec/app_spec.rb
+  checksum: c4dd0264812c3f0004715d0442f1623bce5053c617c5e731b1ba2eadbed6bd9a  
 - filename: spec/application/greet_and_count_spec.rb
   checksum: 102b966612b5a81eab9934b57b9d939932c87e77e9170a32bc70a555a9f5422e
 - filename: spec/fixtures/events/missing_name.json
