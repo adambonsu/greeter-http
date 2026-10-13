@@ -84,6 +84,19 @@ module GreeterHttp
       )
     end
 
+    # A human-readable description of the backend THAT WILL BE SELECTED for the
+    # given default, for a startup banner. Reads GREETER_BACKEND exactly as
+    # counter_from_env does, so the banner reports the real choice rather than a
+    # hardcoded guess; the table name is appended only when dynamodb is in use.
+    # Reports (not set) rather than raising if GREETER_TABLE_NAME is missing, so
+    # a diagnostic banner never breaks startup.
+    def startup_backend_description(default:)
+      backend = ENV.fetch('GREETER_BACKEND', default)
+      return "backend=#{backend}" unless backend == 'dynamodb'
+
+      "backend=dynamodb table=#{ENV.fetch('GREETER_TABLE_NAME', '(not set)')}"
+    end
+
     # Honor an optional endpoint override so the function can run against a
     # local DynamoDB (e.g. DynamoDB Local via `sam local`). In AWS the variable
     # is unset and the SDK resolves the real regional endpoint and the task's

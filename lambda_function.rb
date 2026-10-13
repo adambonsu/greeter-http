@@ -17,10 +17,14 @@ $LOAD_PATH.unshift(File.expand_path('lib', __dir__))
 
 require 'greeter_http'
 
-# Startup banner (cold start): emit the service version to the Lambda log so a
-# deployed build is identifiable in CloudWatch. The dev-server banner lives in
-# config.ru, which Lambda never loads — this is the production equivalent.
+# Startup banner (cold start): emit the service version and the selected
+# datastore backend to the Lambda log so a deployed build — and which store it
+# is wired to — are identifiable in CloudWatch. The backend reflects the real
+# GREETER_BACKEND selection (default dynamodb here, matching build_handler), not
+# a hardcoded value. The dev-server banner lives in config.ru, which Lambda
+# never loads — this is the production equivalent.
 warn "[greeter-http] version=#{GreeterHttp::VERSION}"
+warn "[greeter-http] #{GreeterHttp::App.startup_backend_description(default: 'dynamodb')}"
 
 HANDLER = GreeterHttp::App.build_handler
 
