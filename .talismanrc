@@ -56,7 +56,7 @@ fileignoreconfig:
 - filename: .rubocop.yml
   checksum: 105232f388caae629d30c624ba681ad5f6001e6e93ac558d39fb172da43989d5
 - filename: Gemfile.lock
-  checksum: 0050915dd34618f84ecb631733dc288a3d518e2c77ec3e92ea7b2f4e394a6e23
+  checksum: ec060f175f17ba9bd8e686a1d3c9b25fa56deb9b32281b45c0fca5e32478bb7f
 - filename: README.md
   checksum: 08304bd7e381920147b7319a4ea24828f698ce8cca9ea401a38f29e5b4af9f67
 - filename: env.json.example

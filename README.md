@@ -1,5 +1,7 @@
 # greeter-http
 
+[![CI](https://github.com/greeterhq/greeter-http/actions/workflows/ci.yml/badge.svg)](https://github.com/greeterhq/greeter-http/actions/workflows/ci.yml)
+
 Exposes the [`greeter-core`](https://rubygems.org/gems/greeter-core) domain over
 HTTP on AWS Lambda + API Gateway, and keeps a per-guest greeting count in
 DynamoDB. Greeting the same guest increments a counter; retries are safe
